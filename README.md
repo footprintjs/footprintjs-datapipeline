@@ -147,7 +147,7 @@ const projector: SummaryProjector = {
   async project(observation, context) {
     const batch = context.collectionBatch;
     const input = await context.read(batch.observationRefs[0]!);
-    if (input?.kind !== 'observation') throw new Error('Missing capture input');
+    if (input?.kind !== 'observation' || !input.collectedAt) throw new Error('Missing capture receipt');
     return {
       key: observation.key,
       subject: observation.subject,

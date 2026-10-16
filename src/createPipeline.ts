@@ -22,6 +22,8 @@ export interface PipelineOptions {
 }
 export interface Pipeline {
   collect(request: CollectRequest, options?: ExecutionOptions): Promise<PipelineResult>;
+  /** Lookup-only reconciliation. Missing operations never invoke an adapter or write a trace. */
+  reconcileCollect(request: CollectRequest): Promise<PipelineResult | undefined>;
   derive(request: DeriveRequest, options?: ExecutionOptions): Promise<PipelineResult>;
   read(ref: RecordRef): Promise<StoredRecord | undefined>;
 }
@@ -63,23 +65,48 @@ export function createPipeline(options: PipelineOptions): Pipeline {
   ensure(Number.isSafeInteger(limits.maxObservations) && limits.maxObservations > 0 && Number.isSafeInteger(limits.maxBytes) && limits.maxBytes > 0, 'Limits must be positive integers');
   const active = new Map<string, { fingerprint: string; promise: Promise<PipelineResult> }>();
 
+  function validatedRequest<T extends CollectRequest | DeriveRequest>(input: T): T {
+    const request = freeze(cloneJson(input));
+    ensure(typeof request.idempotencyKey === 'string' && request.idempotencyKey.trim(), 'An idempotencyKey is required');
+    return request;
+  }
+  function resolveCollect(input: CollectRequest): { source: Source; adapter: SourceAdapter; origin: EvidenceOrigin } {
+    assertRef(input.sourceRef);
+    const source = sources.get(canonical(input.sourceRef)); ensure(source, 'Source revision is not registered');
+    const adapter = adapters.get(canonical(source.adapterRef)); ensure(adapter, 'Adapter revision is not registered');
+    ensure(Object.hasOwn(input, 'request'), 'Collection request is required');
+    return { source, adapter, origin: { kind: 'collect', sourceRef: source.ref, adapterRef: source.adapterRef,
+      sourceConfigFingerprint: digest(source.config ?? {}), request: input.request } };
+  }
+
+  async function reconcileCollect(requestInput: CollectRequest): Promise<PipelineResult | undefined> {
+    let operationId = 'invalid-request';
+    try {
+      const request = validatedRequest(requestInput);
+      operationId = digest({ kind: 'collect', key: request.idempotencyKey });
+      const { origin } = resolveCollect(request);
+      const fingerprint = digest({ request, origin });
+      const existing = await repository.findOperation(operationId);
+      if (existing === undefined) return undefined;
+      if (existing.fingerprint !== fingerprint) throw new PipelineFault('IDEMPOTENCY_CONFLICT', 'This idempotency key was used for a different request');
+      return { commit: cloneJson(existing.receipt), trace: traceStore
+        ? { status: 'unavailable', error: { code: 'LOOKUP_ONLY', message: 'Lookup-only reconciliation does not read or write execution traces' } }
+        : { status: 'disabled' } };
+    } catch (error) { return { commit: { operationId, status: 'failed', error: errorRecord(error) }, trace: { status: 'disabled' } }; }
+  }
+
   async function execute(kind: 'collect' | 'derive', requestInput: CollectRequest | DeriveRequest, execution: ExecutionOptions = {}): Promise<PipelineResult> {
     // Validation errors are returned in the same result envelope as acquisition errors.
     let operationId = 'invalid-request';
     try {
-      const request = freeze(cloneJson(requestInput));
-      ensure(typeof request.idempotencyKey === 'string' && request.idempotencyKey.trim(), 'An idempotencyKey is required');
+      const request = validatedRequest(requestInput);
       operationId = digest({ kind, key: request.idempotencyKey });
       let source: Source | undefined;
       let adapter: SourceAdapter | undefined;
       let transform: Transform | undefined;
       let origin: EvidenceOrigin;
       if (kind === 'collect') {
-        const input = request as CollectRequest; assertRef(input.sourceRef);
-        source = sources.get(canonical(input.sourceRef)); ensure(source, 'Source revision is not registered');
-        adapter = adapters.get(canonical(source.adapterRef)); ensure(adapter, 'Adapter revision is not registered');
-        ensure(Object.hasOwn(input, 'request'), 'Collection request is required');
-        origin = { kind, sourceRef: source.ref, adapterRef: source.adapterRef, sourceConfigFingerprint: digest(source.config ?? {}), request: input.request };
+        ({ source, adapter, origin } = resolveCollect(request as CollectRequest));
       } else {
         const input = request as DeriveRequest; assertRef(input.methodRef);
         transform = transforms.get(canonical(input.methodRef)); ensure(transform, 'Transform revision is not registered');
@@ -235,6 +262,7 @@ export function createPipeline(options: PipelineOptions): Pipeline {
   }
   return {
     collect: (request, execution) => execute('collect', request, execution),
+    reconcileCollect,
     derive: (request, execution) => execute('derive', request, execution),
     read: async ref => { const value = await repository.read(cloneJson(ref)); return value === undefined ? undefined : cloneJson(value); },
   };

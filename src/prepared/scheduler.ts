@@ -198,8 +198,13 @@ export function createCollectionScheduler(options: CollectionSchedulerOptions): 
           const existing = await store.readPoll(schedule, slotAt);
           signal.throwIfAborted();
           if (existing === undefined) {
+            // Catch-up/storage work or an earlier source may have consumed an
+            // interval. Explicit `now` is a trusted host's pinned simulation clock.
+            const acquisitionTick = execution.now === undefined ? timestamp(now()) : tick;
+            if (acquisitionTick < next) break;
+            const currentSlot = start + Math.floor((acquisitionTick - start) / schedule.intervalMs) * schedule.intervalMs;
             let poll: PreparedPoll;
-            if (next !== newest || tick - next > (schedule.maxLatenessMs ?? schedule.intervalMs)) {
+            if (next !== currentSlot || acquisitionTick - next > (schedule.maxLatenessMs ?? schedule.intervalMs)) {
               // A previous process may have committed capture data before its summary publication.
               // Lookup never acquires present data to fill a historical slot.
               const recovered = await pipeline.reconcileCollect(collectRequest(schedule, slotAt));
@@ -217,9 +222,10 @@ export function createCollectionScheduler(options: CollectionSchedulerOptions): 
         }
       }
       let hasMore = false;
+      const completedTick = execution.now === undefined ? timestamp(now()) : tick;
       for (const schedule of schedules) {
         signal.throwIfAborted();
-        if (nextSlot(schedule, await store.latestSlot(schedule)) <= tick) hasMore = true;
+        if (nextSlot(schedule, await store.latestSlot(schedule)) <= completedTick) hasMore = true;
       }
       signal.throwIfAborted();
       return { polls, hasMore };

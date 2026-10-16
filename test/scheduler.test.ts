@@ -112,6 +112,32 @@ describe('host-owned scheduled collection', () => {
     expect(result.polls).toMatchObject([{ status: 'missed' }]); expect(f.pipeline.collect).not.toHaveBeenCalled();
   });
 
+  it('rechecks the live clock before acquisition when catch-up work crosses into a newer slot', async () => {
+    const f = fixture(); let live = at(0);
+    vi.mocked(f.store.register).mockImplementation(async () => { live = at(1, 10); });
+    const scheduler = f.create({ clock: () => live });
+    const result = await scheduler.runDue();
+    expect(result).toMatchObject({ hasMore: true, polls: [{ slotAt: at(0), status: 'missed' }] });
+    expect(f.pipeline.collect).not.toHaveBeenCalled();
+    expect((await scheduler.runDue()).polls).toMatchObject([{ slotAt: at(1), status: 'collected' }]);
+    expect(f.acquisition).toHaveBeenCalledTimes(1);
+  });
+
+  it('rechecks a tighter lateness bound even when work stays within the same interval', async () => {
+    const f = fixture(); let live = at(0);
+    vi.mocked(f.store.register).mockImplementation(async () => { live = at(0, 1_001); });
+    const result = await f.create({ clock: () => live, schedules: [{ ...schedule, maxLatenessMs: 1_000 }] }).runDue();
+    expect(result.polls).toMatchObject([{ status: 'missed' }]); expect(f.pipeline.collect).not.toHaveBeenCalled();
+  });
+
+  it('leaves a slot pending if the clock rolls back before acquisition', async () => {
+    const f = fixture(); let live = at(0);
+    vi.mocked(f.store.register).mockImplementation(async () => { live = at(-1); });
+    const result = await f.create({ clock: () => live }).runDue();
+    expect(result).toEqual({ polls: [], hasMore: false });
+    expect(f.pipeline.collect).not.toHaveBeenCalled(); expect(f.store.publish).not.toHaveBeenCalled();
+  });
+
   it('reconciles an unpublished poll from committed collect and derive receipts with stable identities', async () => {
     let rejectPublication = true;
     const f = fixture({ publish: () => { if (rejectPublication) throw new Error('Disk unavailable'); } });

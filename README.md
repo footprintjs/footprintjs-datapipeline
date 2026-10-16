@@ -2,7 +2,7 @@
 
 A small TypeScript library for collecting observations, deriving new observations, and reading the evidence behind them. Collection and derivation execute as FootPrint flows. Adapters own acquisition, transforms own computation, and a repository owns durable publication.
 
-Version 0.1.0 requires Node.js 22 or later. Build and run this checkout with the commands below.
+Version 0.2.0 requires Node.js 22.13 or later. Build and run this checkout with the commands below.
 
 ## Run the example
 
@@ -23,7 +23,10 @@ src/
   createPipeline.ts        public collect / derive / read operations
   flows/collect.ts         FootPrint collection flow
   flows/derive.ts          FootPrint derivation flow
+  prepared/contracts.ts    schedules, prepared summaries and their storage port
+  prepared/scheduler.ts    bounded, restartable collect-and-derive scheduling
   storage/filesystem.ts    optional local repository and trace store
+  storage/sqliteSummaries.ts optional transactional summary time index
 examples/basic.ts          runnable collection and derivation
 test/                     contract, flow and filesystem checks
 ```
@@ -75,7 +78,7 @@ if (derived.commit.evidenceRef) {
 }
 ```
 
-`collect` and `derive` return `{ commit, trace }`. `read` accepts a batch, observation or evidence reference and returns the published record, or `undefined` when it is absent.
+`collect` and `derive` return `{ commit, trace }`. `read` accepts a batch, observation or evidence reference and returns the published record, or `undefined` when it is absent. `reconcileCollect(request)` looks up the exact collection request and source configuration without acquiring data: it returns its saved receipt, `undefined` when absent, or a failed receipt for a conflict or lookup failure. It does not write a new execution trace.
 
 ## Write a plugin
 
@@ -126,6 +129,88 @@ This backend targets one host and a modest number of operations on a local POSIX
 
 The filesystem trace store also offers `read(traceRef)` for inspecting a stored trace. Full traces may contain plugin inputs and outputs, so choose their storage location and retention policy accordingly.
 
+## Scheduled collection and prepared summaries
+
+The host owns a versioned `CollectionSchedule`: a namespace, source, transform,
+summary projector, stable start time, interval and bounded collection request.
+Keep its start time and revision stable across restarts. Changing any configuration
+under the same namespace and schedule revision is a conflict; use a new revision
+for a changed plan. Namespaces are acquisition identities, not conversation IDs.
+The host must authorize readers of a shared namespace.
+
+```ts
+import { createCollectionScheduler, type SummaryProjector } from 'footprintjs-datapipeline';
+import { createSqliteSummaryStore } from 'footprintjs-datapipeline/sqlite';
+
+const projector: SummaryProjector = {
+  ref: { id: 'sample-mean-summary', version: '1' },
+  async project(observation, context) {
+    const batch = context.collectionBatch;
+    const input = await context.read(batch.observationRefs[0]!);
+    if (input?.kind !== 'observation' || !input.collectedAt) throw new Error('Missing capture receipt');
+    return {
+      key: observation.key,
+      subject: observation.subject,
+      collectedAt: input.collectedAt,
+      payload: observation.payload as { [key: string]: import('footprintjs-datapipeline').JsonValue },
+    };
+  },
+};
+const schedule = {
+  ref: { id: 'sample-series-poll', version: '1' },
+  namespace: 'installation-a',
+  sourceRef: source.ref,
+  methodRef: mean.ref,
+  summaryRef: projector.ref,
+  startAt: '2026-10-01T12:00:00.000Z',
+  intervalMs: 60_000,
+  request: { series: 'sample-series' },
+};
+const summaries = createSqliteSummaryStore({ filename: '.pipeline-data/summaries.sqlite' });
+const scheduler = createCollectionScheduler({ pipeline, store: summaries,
+  schedules: [schedule], projectors: [projector] });
+
+// Drive one bounded tick, or await scheduler.start({ signal }) in the host.
+await scheduler.runDue();
+const result = await summaries.query({ schedule,
+  start: '2026-10-01T12:00:00.000Z', end: '2026-10-01T14:00:00.000Z' });
+await summaries.close?.();
+```
+
+The scheduler calls the existing `collect` and `derive` FootPrint flows for each
+current due poll. The projector runs during ingestion and may read its committed
+inputs to preserve sufficient statistics and bounded provenance. It must use the
+actual capture receipt time for `collectedAt`. Domain adapters own units, metric
+meaning, aggregation rules and evidence retrieval. For example, a later mean can
+merge counts and sums; an exact median cannot be reconstructed from means.
+
+Construction starts no timer. `runDue({ now?, signal? })` supports a trusted host
+clock and controlled execution; `start({ signal, pollIntervalMs? })` drives ticks
+until cancellation. Ticks serialize within one scheduler. Past slots are recorded
+as `missed`; only the newest due slot within `maxLatenessMs` (default one interval)
+can acquire current data. Restart never fills a past slot with a new snapshot.
+Empty, failed and missed polls stay distinct. Failed publication does not advance
+the durable cursor. Collection operation keys are stable per namespace, schedule
+revision and slot, so retries reconcile existing commits.
+
+SQLite publishes poll status and all its summaries in one transaction. Its time
+index selects summaries by actual `collectedAt` in `[start, end)`, with no raw
+repository reads, adapter calls or transform runs. Poll coverage counts scheduled
+slots separately: `additionalReceiptPolls` identifies included receipts whose
+scheduled slot fell outside the query. A received sample is not proof of continuous
+coverage or a source operation interval. Queries return a bounded, explicit
+`truncated` result; callers must not label a truncated merge as a complete window.
+Ranges are limited to 31 days and 20,000 expected slots, with at most 50,000
+summary records per query (10,000 by default).
+
+The optional `/sqlite` backend uses Node's built-in SQLite, a local database with
+WAL and immutable content digests. It is suitable for one acquisition owner per
+schedule on one host. It does not elect a distributed scheduler leader or prevent
+two processes from simultaneously contacting a source. Supply another
+`SummaryStore` implementation and host coordination when that is required.
+Stored summary digests protect record consistency; validating original source
+bytes remains a separate, explicit evidence operation.
+
 ## Development
 
 ```sh
@@ -134,4 +219,6 @@ npm test
 npm run build
 ```
 
-The package exports the core API at `footprintjs-datapipeline` and the filesystem backend at `footprintjs-datapipeline/filesystem`.
+The package exports contracts, flows and scheduling at `footprintjs-datapipeline`,
+the raw repository at `/filesystem`, and the independently imported summary index
+at `/sqlite`.

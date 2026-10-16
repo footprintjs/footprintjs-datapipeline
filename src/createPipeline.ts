@@ -218,6 +218,7 @@ export function createPipeline(options: PipelineOptions): Pipeline {
             try {
               const recovered = await abortable(repository.findOperation(operationId), controller.signal);
               if (recovered?.fingerprint === fingerprint) receipt = cloneJson(recovered.receipt);
+              else if (recovered) receipt = { operationId, status: 'failed', error: { code: 'IDEMPOTENCY_CONFLICT', message: 'Another request committed with this idempotency key' } };
             } catch { /* Preserve unknown outcome for reconciliation on retry. */ }
           }
         }

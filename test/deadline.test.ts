@@ -81,6 +81,27 @@ describe('pipeline deadlines at persistence boundaries', () => {
     expect(findOperation).toHaveBeenCalledTimes(2);
   });
 
+  it('reports a proven cross-instance fingerprint conflict as failed', async () => {
+    let competing: OperationCommit | undefined;
+    const findOperation = vi.fn(async () => competing);
+    const commit = vi.fn(async (write: CommitWrite): Promise<CommitReceipt> => {
+      // Another writer won after this caller's initial absent-operation lookup.
+      competing = { fingerprint: 'b'.repeat(64), receipt: receipt(write) };
+      throw Object.assign(new Error('Another request committed this operation'), {
+        code: 'idempotency_conflict',
+      });
+    });
+    const repository: Repository = { findOperation, commit, async read() { return undefined; } };
+    const pipeline = createPipeline({ sources: [source], adapters: [adapter], repository });
+
+    const result = await bounded(pipeline.collect(request));
+
+    expect(result.commit.status).toBe('failed');
+    expect(result.commit.error?.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(findOperation).toHaveBeenCalledTimes(2);
+  });
+
   it('returns committed data and an unavailable trace when trace storage hangs', async () => {
     const records = new Map<string, StoredRecord>();
     const repository: Repository = {

@@ -1,0 +1,28 @@
+{
+  "name": "footprintjs-datapipeline",
+  "version": "0.1.0",
+  "description": "Collection and derivation flows with traceable evidence, built on Footprint",
+  "type": "module",
+  "license": "MIT",
+  "author": "Sanjay Krishna Anbalagan",
+  "repository": { "type": "git", "url": "https://github.com/footprintjs/footprintjs-datapipeline.git" },
+  "engines": { "node": ">=22" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./filesystem": { "types": "./dist/storage/filesystem.d.ts", "import": "./dist/storage/filesystem.js" }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build",
+    "example": "node --import tsx examples/basic.ts",
+    "prepack": "npm run build"
+  },
+  "dependencies": { "footprintjs": "10.0.1", "foottrace": "1.1.0" },
+  "devDependencies": { "@types/node": "^22.19.0", "tsx": "^4.20.6", "typescript": "^5.9.3", "vitest": "^5.0.5" }
+}

@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+.pipeline-data/
+*.tgz
+.env
+.DS_Store

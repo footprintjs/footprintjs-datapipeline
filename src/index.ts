@@ -5,3 +5,7 @@ export type { Pipeline, PipelineOptions, ExecutionOptions } from './createPipeli
 export * from './prepared/contracts.js';
 export { createCollectionScheduler } from './prepared/scheduler.js';
 export type { CollectionScheduler, CollectionSchedulerOptions } from './prepared/scheduler.js';
+export { summarizeNumericSamples, mergeNumericStatistics, NUMERIC_STATISTICS_REF, MAX_NUMERIC_SUPPORT } from './statistics/numericStatistics.js';
+export type { NumericMetricDefinition, NumericSample, NumericAnchor, NumericSupport, NumericStatistics } from './statistics/numericStatistics.js';
+export { compareNumericWindows, NUMERIC_WINDOW_COMPARISON_REF } from './statistics/numericComparison.js';
+export type { NumericWindow, NumericComparisonPolicy, NumericComparisonReason, NumericWindowEvidence, NumericWindowComparison } from './statistics/numericComparison.js';

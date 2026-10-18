@@ -260,3 +260,49 @@ system. Older summaries without these states remain readable but cannot acquire
 variance or exact threshold counts retroactively. Use a new transform/projector
 revision and collection schedule when adopting the new state. Collection,
 derivation, storage and schedule contracts are unchanged.
+
+## Native collection-window evidence (opt in)
+
+`runWindowFlow({ operationId, chart, input?, traceStore?, signal?, timeoutMs?,
+maxRecordBytes? })` runs an ordinary Footprint chart with full read capture,
+`writeProvenance: 'reads-prefix'`, and recorded native decision/control evidence.
+It returns `{ record, trace }`: the engine's own snapshot and the existing
+independent trace-storage outcome. It introduces no graph schema, walker or rule
+language. Use the public `foottrace` readers and `foottrace/cause` to inspect it.
+Trace persistence failing does not turn a completed computation into a data
+commit; this runner has no repository publication authority.
+
+The runner defaults to a 30-second budget shared by asynchronous execution and
+trace acknowledgement, with an 8 MiB retained-record ceiling and 1 MiB input
+ceiling. The trace envelope's `recordedAt` is the runner-start clock; source
+validity and learned times belong in explicit chart values. Input/output limits
+do not preempt trusted synchronous chart code or encoding. Custom
+`prepareWindow`/`project` callbacks must honor the signal and bound their own
+work; the scheduler does not independently time out these trusted callbacks.
+
+A `SummaryProjector` may implement `prepareWindow(context)` to run that chart
+once after each committed collect/derive pair, before any summary projection.
+The context contains the immutable committed collection and derivation batches
+and observations, slot, schedule, read port and cancellation signal. Its result
+is a JSON object of at most 64 KiB, supplied as immutable `project()`
+`context.window`. Persist only compact trace references and selectors in each
+summary. Bump the projector/schedule revision when adopting this hook; the
+library never synthesizes native evidence for older history. Hook failure
+publishes a failed poll without summaries; a host can explicitly retain a trace
+storage `unavailable` outcome in metadata while keeping supported statistics.
+
+Author independent top-level state keys per resource and metric, with focused
+steps that read exactly the keys used by each conclusion. Footprint tracks root
+keys: putting all resources under one object cannot provide resource-level
+attribution. Write compact receipt references, actual validity and learned times,
+metric states and shared `RequirementResult` records; leave source bodies in the
+authorized evidence repository. Use native `decide()` for rules. An application
+must explicitly project its recorded attention/requirements into the public
+record reader's attention map: a state write is not automatically an anomaly.
+
+These records explain evidence derivation, not physical causation. A snapshot
+of a topology link does not prove it was valid throughout a window. Missing
+mappings block only the claims that require them. This release does not join
+independent windows into a historical topology or window tree; unresolved
+cross-window links remain unknown. Original collect/derive and unconfigured
+projectors keep their existing behavior.

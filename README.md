@@ -2,7 +2,7 @@
 
 A small TypeScript library for collecting observations, deriving new observations, and reading the evidence behind them. Collection and derivation execute as FootPrint flows. Adapters own acquisition, transforms own computation, and a repository owns durable publication.
 
-Version 0.2.0 requires Node.js 22.13 or later. Build and run this checkout with the commands below.
+Version 0.3.0 requires Node.js 22.13 or later. Build and run this checkout with the commands below.
 
 ## Run the example
 
@@ -222,3 +222,41 @@ npm run build
 The package exports contracts, flows and scheduling at `footprintjs-datapipeline`,
 the raw repository at `/filesystem`, and the independently imported summary index
 at `/sqlite`.
+
+## Optional numeric summaries
+
+Transforms can use `summarizeNumericSamples(metric, samples)` while captured
+observations are available, then persist that JSON state in their derived payload.
+`mergeNumericStatistics(states)` combines disjoint states without reading raw
+values. The state retains count, mean, M2, sample variance, explicit missing/invalid
+counts, strict `>` counts for configured thresholds, and first/last/min/max anchors
+with exact observation references. Sample variance is `null` for fewer than two
+valid samples; it is zero for a known constant series.
+
+A metric declares its source revision, metric revision, unit, sample grain,
+weighting, clock, dimensions, population and retention policy. All identities and
+thresholds must match to merge. Duplicate or overlapping input references are
+rejected: count/mean/M2 cannot safely deduplicate them. Support is bounded at 4,096
+observations, with at most 32 configured thresholds; narrow windows or partition
+work when those bounds are reached. Overflow and unrepresentable variation are
+rejected. IEEE754 arithmetic is finite precision; a material-loss guard can refuse
+large offsets or cancellation, and does not promise arbitrary precision or a
+final-value error bound. Missing values never become zero. An average of sample averages remains
+equally weighted by samples; it is not an operation-weighted average or a median.
+
+`compareNumericWindows({ current, baseline, policy })` compares these stored
+sample means. Each window provides its half-open range, numeric state and declared
+expected/observed slots. The policy sets minimum valid samples, minimum slot and
+valid-sample coverage, and strict absolute/optional relative change thresholds.
+The helper refuses confident comparisons across incompatible metrics, unequal
+window durations or expected slots, overlapping inputs, inadequate coverage or
+missing samples. A zero baseline has no finite relative change. Returned windows,
+input references, policy, effects and reasons support replay; an observed change
+does not establish a physical cause or statistical significance.
+
+Adapters own the meaning of coverage and the sampling/retention policy. The
+helpers cannot establish that a changing top-N population represents an entire
+system. Older summaries without these states remain readable but cannot acquire
+variance or exact threshold counts retroactively. Use a new transform/projector
+revision and collection schedule when adopting the new state. Collection,
+derivation, storage and schedule contracts are unchanged.

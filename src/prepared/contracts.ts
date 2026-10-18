@@ -1,4 +1,4 @@
-import type { Batch, Coverage, JsonObject, JsonValue, Observation, PipelineResult, RecordRef, VersionedRef } from '../contracts.js';
+import type { Batch, BatchInput, Coverage, JsonObject, JsonValue, Observation, PipelineResult, RecordRef, VersionedRef } from '../contracts.js';
 import type { Pipeline } from '../createPipeline.js';
 
 /** Host-owned acquisition identity. Never take a namespace from an untrusted query. */
@@ -25,6 +25,18 @@ export interface PreparedSummaryCandidate {
 }
 export interface SummaryProjector {
   readonly ref: VersionedRef;
+  /** Optional trusted ingestion hook. Author an ordinary Footprint flow here,
+   * once per committed poll, and return compact references for project().
+   * Never return raw rows or the complete execution record in this metadata.
+   * Change summaryRef when enabling it; old history is not retroactively traced. */
+  prepareWindow?(context: {
+    readonly schedule: CollectionSchedule;
+    readonly slotAt: string;
+    readonly collection: BatchInput;
+    readonly derivation: BatchInput;
+    readonly read: Pipeline['read'];
+    readonly signal: AbortSignal;
+  }): Promise<JsonObject>;
   project(observation: Observation, context: {
     readonly schedule: CollectionSchedule;
     readonly collectionBatch: Batch;
@@ -33,6 +45,8 @@ export interface SummaryProjector {
     /** Collection-time only. Queries never invoke the projector or this read port. */
     readonly read: Pipeline['read'];
     readonly signal: AbortSignal;
+    /** Immutable metadata from this poll's prepareWindow(), if configured. */
+    readonly window?: JsonObject;
   }): Promise<PreparedSummaryCandidate | undefined>;
 }
 export interface PreparedSummary extends PreparedSummaryCandidate {

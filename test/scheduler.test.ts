@@ -70,6 +70,52 @@ function fixture(options: { empty?: boolean; collectedAt?: string; secondCollect
 }
 
 describe('host-owned scheduled collection', () => {
+  it('prepares one native window after commits and shares only its compact metadata with projections', async () => {
+    const f = fixture();
+    const metadata = { trace: { status: 'stored', ref: { kind: 'trace', id: 'native-window' } } };
+    const prepareWindow = vi.fn<NonNullable<SummaryProjector['prepareWindow']>>(async context => {
+      expect(f.calculation).toHaveBeenCalledTimes(1);
+      expect(context.slotAt).toBe(at(2));
+      expect(context.collection).toEqual({ batch: f.collectionBatch, observations: f.raw });
+      expect(context.derivation.batch).toEqual(f.derivedBatch);
+      expect(context.derivation.observations).toHaveLength(1);
+      return metadata;
+    });
+    const projector = { ...f.projector, prepareWindow, project: vi.fn<SummaryProjector['project']>(async (observation, context) => ({
+      key: observation.key, subject: observation.subject, collectedAt: at(2, 10), payload: { ...observation.payload as object, window: context.window ?? null },
+    })) };
+    const result = await f.create({ projectors: [projector] }).runDue({ now: at(2) });
+    expect(prepareWindow).toHaveBeenCalledTimes(1);
+    expect(result.polls[2]!.summaries[0]!.payload.window).toEqual(metadata);
+    expect(Object.isFrozen(vi.mocked(projector.project).mock.calls[0]![1].window)).toBe(true);
+    await f.create({ projectors: [projector] }).runDue({ now: at(2) });
+    expect(prepareWindow).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds window metadata and isolates committed inputs from hook mutation', async () => {
+    const f = fixture();
+    await f.create({ projectors: [{ ...f.projector, async prepareWindow(context) {
+      expect(Object.isFrozen(context.collection.observations[0])).toBe(true);
+      return { oversized: 'x'.repeat(64 * 1024) };
+    } }] }).runDue({ now: at(2) });
+    expect(f.polls.get(at(2))?.status).toBe('failed');
+    expect(f.raw[0]!.payload).toEqual({ value: 10 });
+  });
+
+  it('does not publish untraced claims after failed window preparation or cancellation', async () => {
+    const f = fixture();
+    const project = vi.fn(f.projector.project);
+    const prepareWindow = vi.fn(async () => { throw Error('private source details'); });
+    const result = await f.create({ projectors: [{ ...f.projector, prepareWindow, project }] }).runDue({ now: at(2) });
+    expect(result.polls[2]).toMatchObject({ status: 'failed', summaries: [] });
+    expect(JSON.stringify(result)).not.toContain('private source');
+    expect(project).not.toHaveBeenCalled();
+    const cancelled = fixture(); const controller = new AbortController();
+    await expect(cancelled.create({ projectors: [{ ...cancelled.projector, async prepareWindow() { controller.abort(); return {}; } }] })
+      .runDue({ now: at(2), signal: controller.signal })).rejects.toThrow();
+    expect(cancelled.polls.has(at(2))).toBe(false);
+  });
+
   it('records missed slots and acquires only the newest due slot with exact collection-time bounds', async () => {
     const f = fixture();
     const result = await f.create().runDue({ now: at(2, 5) });

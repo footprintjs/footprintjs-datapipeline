@@ -4,6 +4,8 @@ import { assertRef, assertTimestamp, canonical, cloneJson, ensure } from '../val
 import type { CollectionSchedule, PreparedPoll, PreparedSummary, SummaryProjector, SummaryStore } from './contracts.js';
 import { preparedSummaryId, scheduleFingerprint, validatePoll, validateSchedule } from './validation.js';
 
+const MAX_WINDOW_METADATA_BYTES = 64 * 1024;
+
 export interface CollectionSchedulerOptions {
   readonly pipeline: Pipeline;
   readonly store: SummaryStore;
@@ -55,7 +57,9 @@ export function createCollectionScheduler(options: CollectionSchedulerOptions): 
     const key = canonical(projector.ref);
     ensure(!projectorRegistry.has(key), 'Duplicate summary projector revision');
     ensure(typeof projector.project === 'function', 'A summary projector implementation is required');
-    projectorRegistry.set(key, { ref: freeze(cloneJson(projector.ref)), project: projector.project.bind(projector) });
+    ensure(projector.prepareWindow === undefined || typeof projector.prepareWindow === 'function', 'Window preparation must be a function');
+    projectorRegistry.set(key, { ref: freeze(cloneJson(projector.ref)), project: projector.project.bind(projector),
+      ...(projector.prepareWindow ? { prepareWindow: projector.prepareWindow.bind(projector) } : {}) });
   }
   const identities = new Set<string>();
   for (const schedule of schedules) {
@@ -130,11 +134,21 @@ export function createCollectionScheduler(options: CollectionSchedulerOptions): 
       ensure(sameRef(derivedBatch.methodRef, schedule.methodRef), 'Derivation method revision does not match schedule');
       const output = await observations(derivedBatch, signal);
       const projector = projectorRegistry.get(canonical(schedule.summaryRef))!;
+      const preparedWindow = projector.prepareWindow ? freeze(cloneJson(await projector.prepareWindow({
+        schedule, slotAt, collection: freeze(cloneJson({ batch: collectionBatch, observations: captured })),
+        derivation: freeze(cloneJson({ batch: derivedBatch, observations: output })), read: pipeline.read.bind(pipeline), signal,
+      }))) : undefined;
+      signal.throwIfAborted();
+      if (preparedWindow !== undefined) {
+        ensure(preparedWindow !== null && typeof preparedWindow === 'object' && !Array.isArray(preparedWindow)
+          && Buffer.byteLength(canonical(preparedWindow)) <= MAX_WINDOW_METADATA_BYTES, 'Window metadata must be a bounded JSON object');
+      }
       const summaries: PreparedSummary[] = [];
       const keys = new Set<string>();
       for (const observation of output) {
         signal.throwIfAborted();
-        const candidate = await projector.project(observation, { schedule, collectionBatch, collection, derivation, read: pipeline.read.bind(pipeline), signal });
+        const candidate = await projector.project(observation, { schedule, collectionBatch, collection, derivation, read: pipeline.read.bind(pipeline), signal,
+          ...(preparedWindow === undefined ? {} : { window: preparedWindow }) });
         signal.throwIfAborted();
         if (candidate === undefined) continue;
         const projected = cloneJson(candidate);

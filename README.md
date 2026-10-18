@@ -2,7 +2,7 @@
 
 A small TypeScript library for collecting observations, deriving new observations, and reading the evidence behind them. Collection and derivation execute as FootPrint flows. Adapters own acquisition, transforms own computation, and a repository owns durable publication.
 
-Version 0.3.0 requires Node.js 22.13 or later. Build and run this checkout with the commands below.
+Node.js 22.13 or later is required. Build and run this checkout with the commands below.
 
 ## Run the example
 
@@ -260,3 +260,69 @@ system. Older summaries without these states remain readable but cannot acquire
 variance or exact threshold counts retroactively. Use a new transform/projector
 revision and collection schedule when adopting the new state. Collection,
 derivation, storage and schedule contracts are unchanged.
+
+## Native collection-window evidence (opt in)
+
+`runWindowFlow({ operationId, chart, input?, traceStore?, signal?, timeoutMs?,
+maxRecordBytes? })` runs an ordinary Footprint chart with full read capture,
+`writeProvenance: 'reads-prefix'`, and recorded native decision/control evidence.
+It returns `{ record, trace }`: the engine's own snapshot and the existing
+independent trace-storage outcome. It introduces no graph schema, walker or rule
+language. Use the public `foottrace` readers and `foottrace/cause` to inspect it.
+Trace persistence failing does not turn a completed computation into a data
+commit; this runner has no repository publication authority.
+
+The runner defaults to a 30-second budget shared by asynchronous execution and
+trace acknowledgement, with an 8 MiB retained-record ceiling and 1 MiB input
+ceiling. The trace envelope's `recordedAt` is the runner-start clock; source
+validity and learned times belong in explicit chart values. Input/output limits
+do not preempt trusted synchronous chart code or encoding. Custom
+`prepareWindow`/`project` callbacks must honor the signal and bound their own
+work; the scheduler does not independently time out these trusted callbacks.
+
+`WindowExecutionError` retains the existing fixed `code` and message, with a
+frozen `context`: `phase`, Footprint's shared `AttemptCategory` in `category`,
+and `runtimeStageId` only when a native failure or pause event names the stage.
+Phases distinguish validation, initialization, execution, serialization, paused
+and aborted work. A runner deadline has category `timeout`; caller cancellation
+and failures without a native classification retain `unknown`. Window-wide
+aborts omit a stage identifier rather than blaming an earlier branch failure. Stage categories
+come from that stage's terminal native attempt or its served error's name/code;
+recovered retries and observed inner calls cannot supply another stage's cause.
+Raw exceptions, messages, stacks, validation issues and arbitrary error codes
+are not copied into this context. Initialization or serialization failures do
+not blame the last successful stage. The host still owns its chart's logging
+and must use non-secret stage identifiers.
+
+The returned native record is detached and deeply frozen. For `runWindowFlow`,
+the trace store receives this same immutable value, parsed once; a store must
+not mutate it. A mutation attempt that throws makes trace persistence
+`unavailable` while the completed record remains intact. This does not change
+the existing collect/derive trace-store contract.
+
+A `SummaryProjector` may implement `prepareWindow(context)` to run that chart
+once after each committed collect/derive pair, before any summary projection.
+The context contains the immutable committed collection and derivation batches
+and observations, slot, schedule, read port and cancellation signal. Its result
+is a JSON object of at most 64 KiB, supplied as immutable `project()`
+`context.window`. Persist only compact trace references and selectors in each
+summary. Bump the projector/schedule revision when adopting this hook; the
+library never synthesizes native evidence for older history. Hook failure
+publishes a failed poll without summaries; a host can explicitly retain a trace
+storage `unavailable` outcome in metadata while keeping supported statistics.
+
+Author independent top-level state keys per resource and metric, with focused
+steps that read exactly the keys used by each conclusion. Footprint tracks root
+keys: putting all resources under one object cannot provide resource-level
+attribution. Write compact receipt references, actual validity and learned times,
+metric states and shared `RequirementResult` records; leave source bodies in the
+authorized evidence repository. Use native `decide()` for rules. An application
+must explicitly project its recorded attention/requirements into the public
+record reader's attention map: a state write is not automatically an anomaly.
+
+These records explain evidence derivation, not physical causation. A snapshot
+of a topology link does not prove it was valid throughout a window. Missing
+mappings block only the claims that require them. This release does not join
+independent windows into a historical topology or window tree; unresolved
+cross-window links remain unknown. Original collect/derive and unconfigured
+projectors keep their existing behavior.

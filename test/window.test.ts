@@ -4,9 +4,15 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decide, flowChart } from 'footprintjs';
 import { causalChain, flattenCausalDAG, keysReadFromExecutionTree, stateAt } from 'foottrace';
+import { deepFreeze } from 'foottrace/write';
 import { runWindowFlow, WindowExecutionError } from '../src/index.js';
 import { createFilesystemTraceStore } from '../src/storage/filesystem.js';
 import type { TraceStore } from '../src/ports.js';
+
+vi.mock('foottrace/write', async importOriginal => {
+  const original = await importOriginal<typeof import('foottrace/write')>();
+  return { ...original, deepFreeze: vi.fn(original.deepFreeze) };
+});
 
 const temporary: string[] = [];
 afterEach(async () => { await Promise.all(temporary.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
@@ -26,6 +32,24 @@ function chart() {
 }
 
 describe('native window execution', () => {
+  it('delegates the detached ordinary record to the public record-owner freezer once', async () => {
+    vi.mocked(deepFreeze).mockClear();
+    const result = await runWindowFlow({ operationId: 'window:record-owner', chart: chart() });
+    const calls = vi.mocked(deepFreeze).mock.calls.filter(([record]) => record === result.record);
+    expect(calls).toHaveLength(1);
+    expect(Object.isFrozen(result.record)).toBe(true);
+    expect(Object.isFrozen(result.record.commitLog[0]?.trace)).toBe(true);
+  });
+
+  it('keeps a long native chart replayable and deeply immutable through the public freezer', async () => {
+    let native = flowChart<{ count?: number }>('Start long window', scope => { scope.count = 1; }, 'step-0');
+    for (let index = 1; index < 500; index++) native = native.addFunction('Advance window', scope => { scope.count = scope.count! + 1; }, `step-${index}`);
+    const result = await runWindowFlow({ operationId: 'window:long-record', chart: native.build() });
+    expect(result.record.commitLog).toHaveLength(500);
+    expect(stateAt(result.record, 499).state.count).toBe(500);
+    expect(Object.isFrozen(result.record.commitLog[499]?.trace)).toBe(true);
+    expect(Reflect.set(result.record.commitLog[499]!.trace, '0', {})).toBe(false);
+  });
   it('captures exact per-write inputs and native decisions without linking an unread resource', async () => {
     const result = await runWindowFlow({ operationId: 'window:one', chart: chart() });
     expect(result.trace.status).toBe('disabled');

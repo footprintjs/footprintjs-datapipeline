@@ -326,3 +326,18 @@ mappings block only the claims that require them. This release does not join
 independent windows into a historical topology or window tree; unresolved
 cross-window links remain unknown. Original collect/derive and unconfigured
 projectors keep their existing behavior.
+
+## Unreleased window maintenance
+
+This follow-up is separate from the approved 0.4.0 release. The window runner's
+implementation is split under `src/window/` by validation, deadlines, execution,
+recording and persistence; its public API, error codes and evidence limits stay
+unchanged. Record freezing delegates to the public `deepFreeze` export from
+`foottrace/write`. It receives only freshly parsed ordinary JSON, so the
+freezer's documented exceptions for already-frozen or unsealable values do not
+apply at this boundary.
+
+The temporary control snapshot bridge tracks [Footprint issue 108](https://github.com/footprintjs/footPrint/issues/108).
+The safe failure observer tracks [Footprint issue 109](https://github.com/footprintjs/footPrint/issues/109)
+and can be removed after a compatible native terminal-failure API is released.
+Neither follow-up changes the pinned engine or record-library versions.

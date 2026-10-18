@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decide, flowChart } from 'footprintjs';
 import { causalChain, flattenCausalDAG, keysReadFromExecutionTree, stateAt } from 'foottrace';
-import { runWindowFlow } from '../src/index.js';
+import { runWindowFlow, WindowExecutionError } from '../src/index.js';
 import { createFilesystemTraceStore } from '../src/storage/filesystem.js';
 import type { TraceStore } from '../src/ports.js';
 
@@ -78,6 +78,134 @@ describe('native window execution', () => {
     expect(result.record.sharedState.mean_a).toBe(40);
   });
 
+  it('reuses one deeply immutable detached record for the caller and storage', async () => {
+    let stored: unknown;
+    const result = await runWindowFlow({ operationId: 'window:immutable', chart: chart(), traceStore: { async store(trace) {
+      stored = trace.value;
+      expect(Object.isFrozen(trace.value)).toBe(true);
+      const value = trace.value as { sharedState: object; commitLog: object[] };
+      expect(Object.isFrozen(value.sharedState)).toBe(true);
+      expect(Object.isFrozen(value.commitLog)).toBe(true);
+      expect(Object.isFrozen(value.commitLog[0])).toBe(true);
+      expect(Reflect.set(value.sharedState, 'mean_a', -1)).toBe(false);
+      expect(Reflect.set(value.commitLog, '0', {})).toBe(false);
+      return { kind: 'trace', id: 'stored:immutable' };
+    } } });
+    expect(result.trace.status).toBe('stored');
+    expect(stored).toBe(result.record);
+    expect(result.record.sharedState.mean_a).toBe(40);
+  });
+
+  it('preserves a failing native stage and its served category without retaining error text', async () => {
+    const native = flowChart('Read private source', () => {
+      throw Object.assign(Error('private endpoint password'), { code: 'ECONNRESET' });
+    }, 'read-source').build();
+    const error = await runWindowFlow({ operationId: 'window:safe-failure', chart: native }).catch(error => error);
+    expect(error).toMatchObject({ code: 'WINDOW_FAILED', context: {
+      phase: 'execution', category: 'network', runtimeStageId: expect.stringMatching(/^read-source#\d+$/),
+    } });
+    expect(Object.isFrozen(error.context)).toBe(true);
+    expect(JSON.stringify(error)).not.toMatch(/private endpoint|password|ECONNRESET|raw|stack|issues/);
+  });
+
+  it('does not let a recovered retry blame a later failing stage or supply its category', async () => {
+    let calls = 0;
+    const native = flowChart('Recover retry', () => {
+      if (++calls === 1) throw Object.assign(Error('private retry error'), { status: 401 });
+    }, 'recovered').retry({ attempts: 2 })
+      .addFunction('Fail permanent stage', () => { throw Object.assign(Error('private terminal error'), { name: 'ValidationError' }); }, 'terminal')
+      .build();
+    const error = await runWindowFlow({ operationId: 'window:retry-context', chart: native }).catch(error => error);
+    expect(calls).toBe(2);
+    expect(error.context).toEqual({ phase: 'execution', category: 'permanent', runtimeStageId: expect.stringMatching(/^terminal#\d+$/) });
+    expect(JSON.stringify(error)).not.toMatch(/private|recovered|auth/);
+  });
+
+  it('uses the native final failed attempt category when the served error omits its status', async () => {
+    const native = flowChart('Authorization denied', () => { throw Object.assign(Error('private authorization response'), { status: 401 }); }, 'authorized-source')
+      .retry({ attempts: 1, timeoutMs: 1_000 }).build();
+    const error = await runWindowFlow({ operationId: 'window:attempt-context', chart: native }).catch(error => error);
+    expect(error.context).toEqual({ phase: 'execution', category: 'auth', runtimeStageId: expect.stringMatching(/^authorized-source#\d+$/) });
+    expect(JSON.stringify(error)).not.toContain('private authorization');
+  });
+
+  it('does not treat arbitrary exception names or codes as safe public categories', async () => {
+    const native = flowChart('Fail unknown source', () => {
+      throw Object.assign(Error('private source body'), { name: 'private-name', code: 'private-code' });
+    }, 'unknown-source').build();
+    const error = await runWindowFlow({ operationId: 'window:unknown-category', chart: native }).catch(error => error);
+    expect(error.context).toEqual({ phase: 'execution', category: 'unknown', runtimeStageId: expect.stringMatching(/^unknown-source#\d+$/) });
+    expect(JSON.stringify(error)).not.toMatch(/private/);
+  });
+
+  it('classifies only served fields without reading raw exception metadata getters', async () => {
+    const status = vi.fn(() => 401);
+    const native = flowChart('Read safe classification', () => {
+      throw Object.defineProperty(Error('private exception body'), 'status', { get: status });
+    }, 'safe-classifier').build();
+    const error = await runWindowFlow({ operationId: 'window:raw-getter', chart: native }).catch(error => error);
+    expect(status).not.toHaveBeenCalled();
+    expect(error.context).toEqual({ phase: 'execution', category: 'unknown', runtimeStageId: expect.stringMatching(/^safe-classifier#\d+$/) });
+    expect(JSON.stringify(error)).not.toContain('private exception');
+  });
+
+  it('does not inherit an observed inner call category when its stage later fails', async () => {
+    const native = flowChart('Observed source', scope => {
+      scope.$attempt().observed({ target: 'fixture.inner-source', outcome: 'failed', durationMs: 1,
+        error: Object.assign(Error('private observed response'), { status: 401 }) });
+      throw Object.assign(Error('private stage response'), { code: 'ECONNRESET' });
+    }, 'observed-source').retry({ attempts: 1, timeoutMs: 1_000 }).build();
+    const error = await runWindowFlow({ operationId: 'window:observed-context', chart: native }).catch(error => error);
+    expect(error.context).toEqual({ phase: 'execution', category: 'network', runtimeStageId: expect.stringMatching(/^observed-source#\d+$/) });
+    expect(JSON.stringify(error)).not.toMatch(/private|inner-source|auth/);
+  });
+
+  it('retains terminal failure when a parallel branch also pauses', async () => {
+    const native = flowChart('Start fanout', () => {}, 'start-fanout')
+      .addSelectorFunction('Run required branches', () => ['suspend', 'fail'], 'fanout')
+        .addPausableFunctionBranch('suspend', 'Wait for source', { execute: () => ({ pending: true }), resume: () => {} })
+        .addFunctionBranch('fail', 'Source failed', async () => { await Promise.resolve(); throw Object.assign(Error('private branch failure'), { code: 'ECONNRESET' }); })
+      .end().build();
+    const error = await runWindowFlow({ operationId: 'window:pause-and-failure', chart: native }).catch(error => error);
+    expect(error.context).toEqual({ phase: 'execution', category: 'network', runtimeStageId: expect.stringMatching(/fail#\d+$/) });
+  });
+
+  it('keeps the existing one-argument error constructor and fixed messages usable', () => {
+    for (const [code, phase] of [['WINDOW_INVALID', 'validation'], ['WINDOW_ABORTED', 'aborted'], ['WINDOW_FAILED', 'execution'], ['WINDOW_RECORD_LIMIT', 'serialization']] as const) {
+      const error = new WindowExecutionError(code);
+      expect(error.context).toEqual({ phase, category: 'unknown' });
+      expect(error.code).toBe(code);
+    }
+  });
+
+  it('distinguishes initialization failure without inventing a failing stage', async () => {
+    const native = chart();
+    Object.defineProperty(native, 'scopeFactory', { get() { throw Error('private initialization detail'); } });
+    const error = await runWindowFlow({ operationId: 'window:initialization', chart: native }).catch(error => error);
+    expect(error.context).toEqual({ phase: 'initialization', category: 'unknown' });
+    expect(JSON.stringify(error)).not.toContain('private initialization');
+  });
+
+  it('preserves caller cancellation when native initialization aborts and then throws', async () => {
+    const controller = new AbortController();
+    const native = chart();
+    Object.defineProperty(native, 'scopeFactory', { get() {
+      controller.abort(Error('private initialization abort'));
+      throw Error('private initialization detail');
+    } });
+    const error = await runWindowFlow({ operationId: 'window:initialization-abort', chart: native, signal: controller.signal }).catch(error => error);
+    expect(error).toMatchObject({ code: 'WINDOW_ABORTED', context: { phase: 'aborted', category: 'unknown' } });
+    expect(error.context).not.toHaveProperty('runtimeStageId');
+    expect(JSON.stringify(error)).not.toContain('private initialization');
+  });
+
+  it('distinguishes serialization failure after execution without blaming the last successful stage', async () => {
+    const native = flowChart<{ number?: bigint }>('Retain unsupported serialized value', scope => { scope.number = 1n; }, 'completed-stage').build();
+    const error = await runWindowFlow({ operationId: 'window:serialization', chart: native }).catch(error => error);
+    expect(error).toMatchObject({ code: 'WINDOW_FAILED', context: { phase: 'serialization', category: 'unknown' } });
+    expect(error.context).not.toHaveProperty('runtimeStageId');
+  });
+
   it('records compact input without mutating the caller', async () => {
     const input = { value: 7 };
     const native = flowChart<{ observed?: number }>('Read run input', scope => {
@@ -118,7 +246,7 @@ describe('native window execution', () => {
       .addPausableFunction('Wait for source', { execute: () => ({ pending: true }), resume: () => {} }, 'wait-source').build();
     const store = vi.fn();
     await expect(runWindowFlow({ operationId: 'window:paused', chart: native, traceStore: { store } }))
-      .rejects.toMatchObject({ code: 'WINDOW_FAILED' });
+      .rejects.toMatchObject({ code: 'WINDOW_FAILED', context: { phase: 'paused', category: 'unknown', runtimeStageId: expect.stringMatching(/^wait-source#\d+$/) } });
     expect(store).not.toHaveBeenCalled();
   });
 
@@ -190,5 +318,31 @@ describe('native window execution', () => {
     await expect(runWindowFlow({ operationId: 'window:unsafe-input', chart: chart(), input }))
       .rejects.toMatchObject({ code: 'WINDOW_INVALID' });
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it('distinguishes caller cancellation from a runner deadline without invented stage context', async () => {
+    const controller = new AbortController(); controller.abort(Error('private abort'));
+    await expect(runWindowFlow({ operationId: 'window:cancel-context', chart: chart(), signal: controller.signal }))
+      .rejects.toMatchObject({ context: { phase: 'aborted', category: 'unknown' } });
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const native = flowChart('Uncooperative source', async () => pending, 'uncooperative-source').build();
+    const error = await runWindowFlow({ operationId: 'window:deadline-context', chart: native, timeoutMs: 10 }).catch(error => error);
+    finish();
+    expect(error.context).toEqual({ phase: 'aborted', category: 'timeout' });
+  });
+
+  it('does not attach an earlier branch failure to a later window deadline', async () => {
+    let finish!: () => void;
+    const pending = new Promise<void>(resolve => { finish = resolve; });
+    const native = flowChart('Start source reads', () => {}, 'source-reads')
+      .addSelectorFunction('Read both sources', () => ['network-failure', 'waiting-source'], 'both-sources')
+        .addFunctionBranch('network-failure', 'Failed source', () => { throw Object.assign(Error('private network failure'), { code: 'ECONNRESET' }); })
+        .addFunctionBranch('waiting-source', 'Pending source', async () => pending)
+      .end().build();
+    const error = await runWindowFlow({ operationId: 'window:deadline-after-failure', chart: native, timeoutMs: 20 }).catch(error => error);
+    finish();
+    expect(error).toMatchObject({ code: 'WINDOW_ABORTED' });
+    expect(error.context).toEqual({ phase: 'aborted', category: 'timeout' });
   });
 });

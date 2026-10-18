@@ -3,7 +3,7 @@ export * from './ports.js';
 export { createPipeline } from './createPipeline.js';
 export type { Pipeline, PipelineOptions, ExecutionOptions } from './createPipeline.js';
 export { runWindowFlow, WindowExecutionError } from './window.js';
-export type { WindowFlowOptions, WindowFlowResult, WindowErrorCode } from './window.js';
+export type { WindowFlowOptions, WindowFlowResult, WindowErrorCode, WindowFailureContext } from './window.js';
 export * from './prepared/contracts.js';
 export { createCollectionScheduler } from './prepared/scheduler.js';
 export type { CollectionScheduler, CollectionSchedulerOptions } from './prepared/scheduler.js';

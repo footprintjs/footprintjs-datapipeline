@@ -2,7 +2,7 @@
 
 A small TypeScript library for collecting observations, deriving new observations, and reading the evidence behind them. Collection and derivation execute as FootPrint flows. Adapters own acquisition, transforms own computation, and a repository owns durable publication.
 
-Version 0.3.0 requires Node.js 22.13 or later. Build and run this checkout with the commands below.
+Node.js 22.13 or later is required. Build and run this checkout with the commands below.
 
 ## Run the example
 
@@ -279,6 +279,26 @@ validity and learned times belong in explicit chart values. Input/output limits
 do not preempt trusted synchronous chart code or encoding. Custom
 `prepareWindow`/`project` callbacks must honor the signal and bound their own
 work; the scheduler does not independently time out these trusted callbacks.
+
+`WindowExecutionError` retains the existing fixed `code` and message, with a
+frozen `context`: `phase`, Footprint's shared `AttemptCategory` in `category`,
+and `runtimeStageId` only when a native failure or pause event names the stage.
+Phases distinguish validation, initialization, execution, serialization, paused
+and aborted work. A runner deadline has category `timeout`; caller cancellation
+and failures without a native classification retain `unknown`. Window-wide
+aborts omit a stage identifier rather than blaming an earlier branch failure. Stage categories
+come from that stage's terminal native attempt or its served error's name/code;
+recovered retries and observed inner calls cannot supply another stage's cause.
+Raw exceptions, messages, stacks, validation issues and arbitrary error codes
+are not copied into this context. Initialization or serialization failures do
+not blame the last successful stage. The host still owns its chart's logging
+and must use non-secret stage identifiers.
+
+The returned native record is detached and deeply frozen. For `runWindowFlow`,
+the trace store receives this same immutable value, parsed once; a store must
+not mutate it. A mutation attempt that throws makes trace persistence
+`unavailable` while the completed record remains intact. This does not change
+the existing collect/derive trace-store contract.
 
 A `SummaryProjector` may implement `prepareWindow(context)` to run that chart
 once after each committed collect/derive pair, before any summary projection.

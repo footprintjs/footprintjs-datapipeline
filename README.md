@@ -261,6 +261,39 @@ variance or exact threshold counts retroactively. Use a new transform/projector
 revision and collection schedule when adopting the new state. Collection,
 derivation, storage and schedule contracts are unchanged.
 
+## Optional InfluxDB 2 output
+
+The `/influxdb` subpath provides a bounded line-protocol encoder and an explicit
+HTTP sink. Fields declare float, signed integer, boolean or string types;
+integer fields and nanosecond timestamps use decimal strings. The host owns
+measurement meaning, timestamp choice, destination and credential resolution.
+
+```ts
+import { createInfluxDbSink, type InfluxDbSinkOptions } from 'footprintjs-datapipeline/influxdb';
+
+async function publish(options: InfluxDbSinkOptions) {
+  const sink = createInfluxDbSink(options);
+  return sink.write([{
+    measurement: 'sample_metric', tags: [['site', 'example']],
+    fields: [['value', { type: 'float', value: 5000 }],
+      ['samples', { type: 'integer', value: '4' }]],
+    timestampNs: '1792411200125000000',
+  }]);
+}
+```
+
+Construction starts nothing. Call the sink from an ordinary named Footprint
+step and retain its delivery receipt in the run. All points are validated and
+encoded before credentials or HTTP; requests preserve order and stop on the
+first uncertain batch. Receipts count acknowledged, uncertain and unattempted
+submissions separately. An HTTP error can mean partial storage, never proof of
+zero writes. No automatic retry or cross-store transaction is implied.
+
+The sink is independent of the repository and adds no scheduler, source client,
+vendor mapping or change to existing collect/derive flows. See the
+[sink contract and verification](docs/INFLUXDB_SINK.md) for limits, the supported
+lossless encoding profile, timeout behavior and disposable-database tests.
+
 ## Native collection-window evidence (opt in)
 
 `runWindowFlow({ operationId, chart, input?, traceStore?, signal?, timeoutMs?,

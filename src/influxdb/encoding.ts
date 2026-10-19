@@ -9,6 +9,13 @@ const MIN_TIMESTAMP = -9223372036854775806n;
 const MAX_TIMESTAMP = 9223372036854775806n;
 const escapeMeasurement = (value: string) => value.replace(/[ ,]/g, character => `\\${character}`);
 const escapeKey = (value: string) => value.replace(/[ ,=]/g, character => `\\${character}`);
+const rejectedPoints = new WeakMap<object, number>();
+
+/** Internal sink boundary: foreign properties cannot supply a point position. */
+export function readRejectedPointIndex(error: unknown): number | undefined {
+  return error !== null && (typeof error === 'object' || typeof error === 'function')
+    ? rejectedPoints.get(error) : undefined;
+}
 
 function safeFailure(error: unknown): InfluxValidationError {
   let code: InfluxValidationCode = 'invalid-data';
@@ -19,6 +26,17 @@ function safeFailure(error: unknown): InfluxValidationError {
     }
   } catch { /* Caller-controlled error inspection cannot expose its own failure. */ }
   return new InfluxValidationError(code);
+}
+
+function pointFailure(failure: InfluxValidationError, index: number): InfluxValidationError {
+  Object.defineProperty(failure, 'rejectedPointIndex', { value: index, enumerable: true });
+  rejectedPoints.set(failure, index);
+  return failure;
+}
+
+function inputPoints(points: unknown, maximum: number): readonly unknown[] {
+  try { return dataArray(points, maximum); }
+  catch (error) { throw safeFailure(error); }
 }
 
 function encodePairs(value: unknown, fields: boolean, prefixBytes = 0): readonly string[] {
@@ -54,23 +72,23 @@ function encodePoint(value: unknown): string {
 /** Validate and detach every point before a sink can resolve credentials or send. */
 export function encodePointLines(points: readonly InfluxPoint[], limits?: InfluxLimits): readonly string[] {
   const normalized = normalizeInfluxLimits(limits);
-  try {
-    const input = dataArray(points, normalized.maxPoints);
-    const lines: string[] = [];
-    let bytes = 0;
-    for (const point of input) {
-      const line = encodePoint(point);
-      const lineBytes = Buffer.byteLength(line);
-      bytes += lineBytes + (lines.length > 0 ? 1 : 0);
-      if (lineBytes > normalized.maxBatchBytes || bytes > normalized.maxBytes) {
-        throw new InfluxValidationError('limit-exceeded');
-      }
-      lines.push(line);
+  const input = inputPoints(points, normalized.maxPoints);
+  const lines: string[] = [];
+  let bytes = 0;
+  for (let index = 0; index < input.length; index++) {
+    let line: string;
+    try { line = encodePoint(input[index]); }
+    catch (error) { throw pointFailure(safeFailure(error), index); }
+    const lineBytes = Buffer.byteLength(line);
+    bytes += lineBytes + (lines.length > 0 ? 1 : 0);
+    // Aggregate budgets do not identify a defective point, including a clamped batch default.
+    if (bytes > normalized.maxBytes) throw new InfluxValidationError('limit-exceeded');
+    if (lineBytes > normalized.maxBatchBytes) {
+      throw pointFailure(new InfluxValidationError('limit-exceeded'), index);
     }
-    return Object.freeze(lines);
-  } catch (error) {
-    throw safeFailure(error);
+    lines.push(line);
   }
+  return Object.freeze(lines);
 }
 
 export function encodeLineProtocol(points: readonly InfluxPoint[], limits?: InfluxLimits): string {

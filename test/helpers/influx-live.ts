@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createInfluxDbSink } from '../../src/influxdb/index.js';
+import { createInfluxDbSink, type InfluxLimits } from '../../src/influxdb/index.js';
 
 export const liveEnabled = !!process.env.INFLUX_TEST_URL;
 if (process.env.INFLUX_TEST_REQUIRED === '1' && !liveEnabled) throw new Error('Disposable InfluxDB is required.');
@@ -33,7 +33,9 @@ export async function createLiveFixture() {
     body: JSON.stringify({ orgID, name: bucket, retentionRules: [] }),
   })).json() as { id: string };
   return {
-    sink: (limits = {}) => createInfluxDbSink({ url, org, bucket, getToken: () => token, limits }),
+    sink: (limits: InfluxLimits = {}, fetch?: typeof globalThis.fetch) => createInfluxDbSink({
+      url, org, bucket, getToken: () => token, limits, ...(fetch ? { fetch } : {}),
+    }),
     async rawWrite(body: string) {
       const response = await request(`/api/v2/write?org=${encodeURIComponent(org)}&bucket=${bucket}&precision=ns`, {
         method: 'POST', headers: { 'Content-Type': 'text/plain' }, body,

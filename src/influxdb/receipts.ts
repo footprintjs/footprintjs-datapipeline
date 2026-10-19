@@ -7,7 +7,8 @@ function receiptStatus(total: number, acknowledged: number, uncertain: number, c
   return uncertain > 0 ? 'unknown' : 'not-written';
 }
 
-export function writeReceipt(totalPoints: number, batches: readonly InfluxBatchReceipt[], code?: InfluxWriteCode): InfluxWriteReceipt {
+export function writeReceipt(totalPoints: number, batches: readonly InfluxBatchReceipt[], code?: InfluxWriteCode,
+  rejectedPointIndex?: number): InfluxWriteReceipt {
   const acknowledgedPoints = batches.filter(batch => batch.status === 'acknowledged')
     .reduce((count, batch) => count + batch.pointCount, 0);
   const uncertainPoints = batches.filter(batch => batch.status === 'unknown')
@@ -15,5 +16,6 @@ export function writeReceipt(totalPoints: number, batches: readonly InfluxBatchR
   const notAttemptedPoints = totalPoints - acknowledgedPoints - uncertainPoints;
   const status = receiptStatus(totalPoints, acknowledgedPoints, uncertainPoints, code);
   return Object.freeze({ status, totalPoints, acknowledgedPoints, uncertainPoints, notAttemptedPoints,
-    batches: Object.freeze(batches.map(batch => Object.freeze({ ...batch }))), ...(code ? { code } : {}) });
+    batches: Object.freeze(batches.map(batch => Object.freeze({ ...batch }))), ...(code ? { code } : {}),
+    ...(rejectedPointIndex === undefined ? {} : { rejectedPointIndex }) });
 }

@@ -1,7 +1,7 @@
 import { InfluxValidationError, type InfluxBatchReceipt, type InfluxDbSink,
   type InfluxDbSinkOptions, type InfluxPoint, type InfluxWriteCode } from './contracts.js';
 import { createWriteBudget, type StopCode } from './budget.js';
-import { encodePointLines } from './encoding.js';
+import { encodePointLines, readRejectedPointIndex } from './encoding.js';
 import { partitionLines } from './partition.js';
 import { writeReceipt } from './receipts.js';
 import { readSinkSettings } from './settings.js';
@@ -88,9 +88,11 @@ export function createInfluxDbSink(options: InfluxDbSinkOptions): InfluxDbSink {
         }
         return writeReceipt(total, receipts);
       } catch (error) {
-        const code = failureCode(error, phase, budget?.reason());
+        const stopped = budget?.reason();
+        const code = failureCode(error, phase, stopped);
+        const rejectedPointIndex = phase === 'validation' && !stopped ? readRejectedPointIndex(error) : undefined;
         if (dispatched) receipts.push({ index, pointCount: count, status: 'unknown', code });
-        return writeReceipt(total, receipts, code);
+        return writeReceipt(total, receipts, code, rejectedPointIndex);
       } finally {
         budget?.close();
       }

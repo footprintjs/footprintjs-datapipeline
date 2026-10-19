@@ -33,6 +33,8 @@ export type InfluxValidationCode = 'invalid-data' | 'limit-exceeded' | 'invalid-
 
 export class InfluxValidationError extends Error {
   readonly name = 'InfluxValidationError';
+  /** Zero-based input position only when one specific point was refused. */
+  declare readonly rejectedPointIndex?: number;
   constructor(readonly code: InfluxValidationCode) {
     super('InfluxDB input or options were refused.');
   }
@@ -58,6 +60,8 @@ export interface InfluxWriteReceipt {
   readonly notAttemptedPoints: number;
   readonly batches: readonly InfluxBatchReceipt[];
   readonly code?: InfluxWriteCode;
+  /** Zero-based input position for a point-local preflight refusal only. */
+  readonly rejectedPointIndex?: number;
 }
 
 export interface InfluxDbSinkOptions {

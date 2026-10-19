@@ -63,6 +63,26 @@ are refused. No oversized point is split and no prefix is silently published.
 The whole call is encoded before credentials or HTTP, so a bad later point
 cannot allow an earlier valid point to escape first.
 
+### Point-local refusals
+
+An encoder `InfluxValidationError`, or the sink's `not-written` receipt, may
+include `rejectedPointIndex`: the zero-based position of the first refused point
+in **this call's** input. It contains no name, field value or exception text.
+The encoder assigns that position itself; caller-thrown errors cannot supply it.
+Whole-call byte/count budgets, malformed outer arrays, options and delivery
+failures have no point index. A point exceeding its individual request-size
+ceiling can have an index; this means it cannot fit the configured request,
+not that its source observation is false.
+
+Preflight still rejects the entire call with zero dispatches. The sink does not
+drop points or resend the remainder. A host may apply an explicit admission
+policy, record that point's source reference and fixed reason as a coverage gap,
+then submit a new bounded list. Keep a new ordered manifest for that list:
+indexes never refer to an earlier call. Do not discard a healthy point to satisfy
+an aggregate budget, or claim complete coverage after omitting required data.
+Vendor adapters must first reproduce their existing collector's cleanup exactly;
+this diagnostic is not a replacement for the Python compatibility contract.
+
 ## Explicit delivery and receipts
 
 The host supplies `url`, `org`, `bucket`, `getToken` and optional limits,
@@ -98,6 +118,26 @@ an uncertain request into acknowledgement. Synchronous host code cannot be
 preempted; the budget is checked again before accepting its result. No automatic
 retry, durable queue, exactly-once delivery or reconciliation is supplied.
 
+### Replaying an unknown write
+
+InfluxDB identifies a point by measurement, tag set and timestamp, and merges its
+fields on repeated writes. Replaying the same ordered payload to the same
+destination preserves the stored result when no competing write has changed
+those same fields and no earlier request can still apply updates out of order.
+Retain the admitted typed points and their exact timestamps:
+never recollect, read a new clock, recompute values or change the destination on
+retry. Preserve point order, including any overlapping field updates. A delayed
+replay can overwrite a later correction, so the host must coordinate ownership
+and ordering, including any previous request that may still be running; an
+`unknown` receipt is not blanket permission to retry.
+
+The sink never retries automatically. A host-authorized replay is a new attempt
+with a separate receipt linked to the same immutable manifest. A later 204 does
+not rewrite the earlier attempt's uncertainty or prove exactly-once delivery.
+Disposable-database tests simulate a lost acknowledgement, replay the unchanged
+payload and compare the stored values/types/timestamps. Another test proves
+that replaying old values can overwrite a later correction at the same identity.
+
 ## Footprint and evidence ownership
 
 Call `sink.write()` in a named Footprint step, with one recorded point per entity
@@ -114,6 +154,12 @@ The host owns crash recovery, receipt retention and any later retry policy.
 Influx is not a replacement `Repository`: it cannot meet that port's atomic
 data-plus-evidence publication contract.
 
+The proposed host integration stores durable run facts in the existing
+`Repository` and native flow records in the existing `TraceStore`; the sink does
+not persist them itself. The [host receipt plan](INFLUXDB_HOST_RECEIPTS.md) names
+the immutable source, point-manifest, intent and result records and their crash
+rules. That integration remains application work.
+
 ## Verification and next integration
 
 Tests cover typed encoding, preflight limits, escaping, malformed data, frozen
@@ -125,9 +171,10 @@ delivery is uncertain and never records credentials.
 CI runs Node 22 and 24 against a disposable InfluxDB 2.7.12 service. Tests create
 unique buckets, verify decoded values/types/timestamps and delete those buckets.
 They prove equivalent float spellings, ordered duplicate-point overwrite and
-that a failed mixed batch really can store a valid row. Python 3 is required for
+that a failed mixed batch really can store a valid row, plus the conditional
+replay behavior above. Python 3 is required for
 the clock probe and independent standard-library CSV reader. A missing Python
-interpreter fails the tests. Without explicit loopback test configuration, six
+interpreter fails the tests. Without explicit loopback test configuration, eight
 database tests are reported as skipped; CI requires them and fails without it.
 No database is required to use the encoder; the sink connects only when called.
 

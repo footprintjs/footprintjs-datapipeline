@@ -150,7 +150,7 @@ function writer(record: RuntimeSnapshot, key: string) {
 }
 
 function controlCapture(record: RuntimeSnapshot) {
-  const bundle = record.recorders?.find(item => item.name === 'window-control-dependencies');
+  const bundle = record.recorders?.find(item => item.name === 'control-dependencies');
   const data = bundle?.data;
   if (data === null || typeof data !== 'object' || !('controlDeps' in data) || !('decisions' in data)) {
     throw new Error('Native control-dependency capture is required');

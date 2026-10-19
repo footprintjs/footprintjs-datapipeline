@@ -321,13 +321,16 @@ work; the scheduler does not independently time out these trusted callbacks.
 
 `WindowExecutionError` retains the existing fixed `code` and message, with a
 frozen `context`: `phase`, Footprint's shared `AttemptCategory` in `category`,
-and `runtimeStageId` only when a native failure or pause event names the stage.
+and `runtimeStageId` only when the native terminal failure or checkpoint names the execution.
 Phases distinguish validation, initialization, execution, serialization, paused
 and aborted work. A runner deadline has category `timeout`; caller cancellation
 and failures without a native classification retain `unknown`. Window-wide
 aborts omit a stage identifier rather than blaming an earlier branch failure. Stage categories
-come from that stage's terminal native attempt or its served error's name/code;
-recovered retries and observed inner calls cannot supply another stage's cause.
+and ownership come from Footprint's public `getFailureContext()`, without
+inspecting retry records or reconstructing errors from observer events.
+Recovered retries, observed inner calls and contained branch errors cannot
+supply another stage's cause. A contained error does not fail an otherwise
+completed window.
 Raw exceptions, messages, stacks, validation issues and arbitrary error codes
 are not copied into this context. Initialization or serialization failures do
 not blame the last successful stage. The host still owns its chart's logging
@@ -338,6 +341,12 @@ the trace store receives this same immutable value, parsed once; a store must
 not mutate it. A mutation attempt that throws makes trace persistence
 `unavailable` while the completed record remains intact. This does not change
 the existing collect/derive trace-store contract.
+
+From 0.6.0, the window uses Footprint's built-in control recorder, whose snapshot
+bundle is named `control-dependencies`. Records saved by 0.4.x and 0.5.x use
+`window-control-dependencies`. Applications that read saved control bundles must
+recognize both profiles before upgrading, and reject an ambiguous selection
+rather than combine duplicate bundles. Existing stored records are not rewritten.
 
 A `SummaryProjector` may implement `prepareWindow(context)` to run that chart
 once after each committed collect/derive pair, before any summary projection.

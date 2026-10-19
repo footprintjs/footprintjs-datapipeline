@@ -64,7 +64,7 @@ describe('native window execution', () => {
     expect(stages).not.toContain('capture-b');
     expect(result.record.writeProvenance).toBe('reads-prefix');
     expect(result.record.sharedState.finding_a).toBe('slow');
-    const controls = result.record.recorders?.find(item => item.name === 'window-control-dependencies');
+    const controls = result.record.recorders?.find(item => item.name === 'control-dependencies');
     expect(controls?.data).toMatchObject({ decisions: [expect.objectContaining({
       evidence: expect.objectContaining({ rules: [expect.objectContaining({ conditions: [expect.objectContaining({ key: 'mean_a', op: 'gt', threshold: 30, result: true })] })] }),
     })] });
@@ -186,7 +186,7 @@ describe('native window execution', () => {
 
   it('retains terminal failure when a parallel branch also pauses', async () => {
     const native = flowChart('Start fanout', () => {}, 'start-fanout')
-      .addSelectorFunction('Run required branches', () => ['suspend', 'fail'], 'fanout')
+      .addSelectorFunction('Run required branches', () => ['suspend', 'fail'], 'fanout', undefined, { failFast: true })
         .addPausableFunctionBranch('suspend', 'Wait for source', { execute: () => ({ pending: true }), resume: () => {} })
         .addFunctionBranch('fail', 'Source failed', async () => { await Promise.resolve(); throw Object.assign(Error('private branch failure'), { code: 'ECONNRESET' }); })
       .end().build();

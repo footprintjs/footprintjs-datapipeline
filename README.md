@@ -289,6 +289,12 @@ first uncertain batch. Receipts count acknowledged, uncertain and unattempted
 submissions separately. An HTTP error can mean partial storage, never proof of
 zero writes. No automatic retry or cross-store transaction is implied.
 
+Point-local preflight failures include a value-free `rejectedPointIndex`; global
+limits do not blame a point. The host decides whether to record a coverage gap
+and submit a new list. Replaying an unknown write requires an unchanged payload,
+timestamp, destination and order, with protection against overwriting later
+corrections. The sink never drops points or retries automatically.
+
 The sink is independent of the repository and adds no scheduler, source client,
 vendor mapping or change to existing collect/derive flows. See the
 [sink contract and verification](docs/INFLUXDB_SINK.md) for limits, the supported

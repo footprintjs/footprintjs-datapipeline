@@ -35,6 +35,7 @@
   "files": [
     "dist",
     "docs/INFLUXDB_SINK.md",
+    "docs/INFLUXDB_HOST_RECEIPTS.md",
     "README.md",
     "LICENSE"
   ],

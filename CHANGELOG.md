@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.0] - 2026-10-19
+
+### Added
+
+- Optional `footprintjs-datapipeline/influxdb` output: typed line-protocol encoding and bounded, sequential HTTP delivery. Float, signed int64, boolean and string fields are explicit; integer fields and nanosecond timestamps retain their exact supplied values. [PR #6](https://github.com/footprintjs/footprintjs-datapipeline/pull/6).
+- Whole-call validation before credentials or HTTP, hard limits, redirect refusal and a deadline covering credential resolution and delivery. Receipts distinguish acknowledged, uncertain and unattempted submissions; only HTTP 204 acknowledges a batch.
+- Value-free `rejectedPointIndex` diagnostics for point-local preflight failures. Aggregate limits and other whole-call failures do not blame a point. The host decides admission policy; the writer never drops points or retries automatically. [PR #7](https://github.com/footprintjs/footprintjs-datapipeline/pull/7).
+
+### Documentation
+
+- Documented conditional replay, including the risk of overwriting newer corrections, and a host receipt-storage plan using the existing repository and trace store. Durable intent/result integration remains application work; returned delivery receipts are not automatically persisted.
+
+### Compatibility
+
+- The new output is opt-in. Existing collect/derive flows, schedules, storage contracts and pinned dependencies are unchanged. No vendor collector, Neo integration, background service, automatic retry or exactly-once delivery is added.
+
 ## [0.4.1] - 2026-10-18
 
 ### Changed

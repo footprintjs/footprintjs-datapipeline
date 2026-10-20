@@ -6,10 +6,18 @@ import type {
 } from '../contracts.js';
 import type { CommitWrite, OperationCommit, Repository, TraceStore } from '../ports.js';
 import { canonical } from '../validation.js';
+import { compressTrace, readGzipTrace, MAX_COMPRESSED_TRACE_CONTENT_BYTES } from './traceCompression.js';
 
 export interface FilesystemOptions {
   /** Explicit storage location; there is no implicit in-memory fallback. */
   readonly directory: string;
+}
+
+export interface FilesystemTraceOptions extends FilesystemOptions {
+  /** New writes only; existing plain traces are never rewritten. Default: none. */
+  readonly compression?: 'none' | 'gzip';
+  /** Gzip content ceiling, before compression and during decompression; may lower 16 MiB. */
+  readonly maxTraceBytes?: number;
 }
 
 export class FilesystemRepositoryError extends Error {
@@ -32,7 +40,7 @@ interface Manifest {
   readonly records: readonly Entry[];
 }
 
-const digest = (text: string): string => createHash('sha256').update(text).digest('hex');
+const digest = (text: string | Uint8Array): string => createHash('sha256').update(text).digest('hex');
 const sameRef = (a: RecordRef, b: RecordRef): boolean => a.kind === b.kind && a.id === b.id;
 const refKey = (ref: RecordRef): string => `${ref.kind}:${ref.id}`;
 const recordFile = (ref: RecordRef): string => `${ref.kind}-${digest(refKey(ref))}.json`;
@@ -67,7 +75,7 @@ async function ensureDirectory(path: string): Promise<void> {
   await syncDirectory(dirname(firstCreated));
 }
 
-async function writeSynced(path: string, text: string): Promise<void> {
+async function writeSynced(path: string, text: string | Uint8Array): Promise<void> {
   const handle = await open(path, 'wx', 0o600);
   try {
     await handle.writeFile(text, 'utf8');
@@ -282,25 +290,34 @@ export function createFilesystemRepository(options: FilesystemOptions): Filesyst
 /** Optional, separate post-run trace store. A trace write never commits data. */
 export class FilesystemTraceStore implements TraceStore {
   private readonly traces: string;
-  constructor(options: FilesystemOptions) {
+  private readonly compression: 'none' | 'gzip';
+  private readonly maxTraceBytes: number;
+  constructor(options: FilesystemTraceOptions) {
     if (!options.directory) throw new FilesystemRepositoryError('invalid_directory', 'An explicit directory is required.');
+    this.compression = options.compression ?? 'none';
+    this.maxTraceBytes = options.maxTraceBytes ?? MAX_COMPRESSED_TRACE_CONTENT_BYTES;
+    if (!['none', 'gzip'].includes(this.compression) || !Number.isSafeInteger(this.maxTraceBytes) ||
+        this.maxTraceBytes < 1 || this.maxTraceBytes > MAX_COMPRESSED_TRACE_CONTENT_BYTES) {
+      throw new FilesystemRepositoryError('invalid_trace_options', 'Trace codec settings are invalid.');
+    }
     this.traces = join(resolve(options.directory), 'traces');
   }
 
   async store(trace: TraceRecord): Promise<TraceRef> {
     const bytes = json(trace);
     const id = digest(bytes);
+    if (this.compression === 'gzip' && Buffer.byteLength(bytes) > this.maxTraceBytes) {
+      throw new FilesystemRepositoryError('trace_limit', 'Trace content exceeds the gzip limit.');
+    }
+    const previous = await this.read({ kind: 'trace', id });
+    if (previous !== undefined) return { kind: 'trace', id };
+    const encoded = this.compression === 'gzip' ? await compressTrace(bytes) : bytes;
     await ensureDirectory(this.traces);
-    const final = join(this.traces, `${id}.json`);
-    try {
-      const existing = await readFile(final, 'utf8');
-      if (digest(existing) !== id) corrupt('A stored trace failed its content hash check.');
-      return { kind: 'trace', id };
-    } catch (error) { if (!isMissing(error)) throw error; }
+    const final = join(this.traces, `${id}.json${this.compression === 'gzip' ? '.gz' : ''}`);
     const staging = await mkdtemp(join(this.traces, '.stage-'));
     try {
       const temporary = join(staging, 'trace.json');
-      await writeSynced(temporary, bytes);
+      await writeSynced(temporary, encoded);
       await rename(temporary, final);
       await syncDirectory(this.traces);
       return { kind: 'trace', id };
@@ -309,13 +326,22 @@ export class FilesystemTraceStore implements TraceStore {
 
   async read(ref: TraceRef): Promise<TraceRecord | undefined> {
     if (ref.kind !== 'trace' || !/^[a-f0-9]{64}$/.test(ref.id)) throw new FilesystemRepositoryError('invalid_reference', 'A valid trace reference is required.');
-    let bytes: string;
-    try { bytes = await readFile(join(this.traces, `${ref.id}.json`), 'utf8'); } catch (error) { if (isMissing(error)) return undefined; throw error; }
+    let bytes: string | Buffer;
+    try { bytes = await readFile(join(this.traces, `${ref.id}.json`), 'utf8'); }
+    catch (error) {
+      if (!isMissing(error)) throw error;
+      try { bytes = await readGzipTrace(join(this.traces, `${ref.id}.json.gz`), this.maxTraceBytes); }
+      catch (compressedError) {
+        if (isMissing(compressedError)) return undefined;
+        return corrupt('A compressed trace is unreadable or exceeds its content limit.');
+      }
+    }
     if (digest(bytes) !== ref.id) corrupt('A stored trace failed its content hash check.');
-    return JSON.parse(bytes) as TraceRecord;
+    try { return JSON.parse(typeof bytes === 'string' ? bytes : bytes.toString('utf8')) as TraceRecord; }
+    catch { return corrupt('A stored trace is invalid JSON.'); }
   }
 }
 
-export function createFilesystemTraceStore(options: FilesystemOptions): FilesystemTraceStore {
+export function createFilesystemTraceStore(options: FilesystemTraceOptions): FilesystemTraceStore {
   return new FilesystemTraceStore(options);
 }

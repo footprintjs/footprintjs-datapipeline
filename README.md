@@ -395,3 +395,18 @@ mappings block only the claims that require them. This release does not join
 independent windows into a historical topology or window tree; unresolved
 cross-window links remain unknown. Original collect/derive and unconfigured
 projectors keep their existing behavior.
+
+## Read existing InfluxDB data (opt in)
+
+`createInfluxDbReader` and `createInfluxDbSourceAdapter` are optional exports from
+`footprintjs-datapipeline/influxdb`. Register fixed, versioned templates and use
+a server-enforced read-only token. Explicit bounded windows and typed settings
+produce immutable saved query results and receipts, labelled as database evidence.
+The source adapter uses the existing collect/repository contract, one observation
+per result row, with unknown upstream collection coverage.
+
+The reader does not make database contents immutable or approve database arithmetic.
+Drill-down creates a new saved read; equal aggregate values cannot certify unchanged
+underlying rows. Application adapters own measurement meanings, calculation matching
+tests, historical relationships, claim gates and access checks. See the
+[reader contract](docs/INFLUXDB_READER.md) for bounds, templates and limitations.

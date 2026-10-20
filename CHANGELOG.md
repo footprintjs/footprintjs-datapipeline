@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Optional InfluxDB reader and source adapter with registered versioned templates, literal bindings, bounded responses and fixed read diagnostics. Saved query rows use ordinary observations and one database-boundary receipt, with explicit mutable-source and unknown upstream coverage semantics. Database calculation delegation remains application-owned and requires matching tests.
+
+### Changed
+
+- Share the existing writer connection validation and credential/body handling with the reader; write behavior and public write contracts are unchanged.
+
 ## [0.7.0] - 2026-10-20
 
 ### Added

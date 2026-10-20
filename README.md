@@ -129,6 +129,27 @@ This backend targets one host and a modest number of operations on a local POSIX
 
 The filesystem trace store also offers `read(traceRef)` for inspecting a stored trace. Full traces may contain plugin inputs and outputs, so choose their storage location and retention policy accordingly.
 
+Pass `compression: 'gzip'` to `createFilesystemTraceStore` to compress new trace
+files. The default remains plain JSON. Both formats keep the same trace reference:
+its SHA-256 covers the original canonical UTF-8 JSON, not the compressed bytes.
+The reader reopens either format, bounds decompression and verifies that original
+fingerprint before returning the record. Decisions, values and provenance are
+unchanged; this is storage encoding, not sampling or a compact snapshot view.
+
+Gzip writes and reads default to a 16 MiB uncompressed content ceiling, including
+the trace envelope. `maxTraceBytes` may lower that ceiling. Compressed input is
+also bounded (the content ceiling plus 64 KiB of encoding overhead); malformed,
+changed, invalid UTF-8, oversized or fingerprint-mismatched gzip is refused as
+`storage_corrupt`. An oversized gzip write is refused as `trace_limit` before
+publication. These gzip bounds do not change existing plain-file size behavior.
+
+New compressed files use `<id>.json.gz`; old plain files remain `<id>.json`.
+Existing traces are never rewritten. Upgrade every reader before opting writers
+into gzip: older package versions cannot discover the new file suffix. Changing
+the setting does not migrate existing files or reclaim old storage. The same
+atomic publication and local filesystem assumptions apply. Compression neither
+encrypts evidence nor changes access, retention or data-commit guarantees.
+
 ## Scheduled collection and prepared summaries
 
 The host owns a versioned `CollectionSchedule`: a namespace, source, transform,

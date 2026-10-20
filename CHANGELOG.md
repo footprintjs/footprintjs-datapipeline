@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Optional gzip encoding for new filesystem traces. Trace references still fingerprint the original canonical JSON; reopening verifies those bytes and preserves the native record and cause explanations exactly. Plain JSON remains the default, and existing files are not migrated. Upgrade all readers before enabling compressed writes.
+- Bounded compressed reads and decompression, a lowerable 16 MiB gzip content ceiling, and fixed corruption/limit errors. No data-store encoding, dependency, retention or collection behavior changes.
+
 ## [0.6.0] - 2026-10-19
 
 ### Changed

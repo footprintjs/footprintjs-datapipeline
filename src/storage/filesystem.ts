@@ -345,3 +345,6 @@ export class FilesystemTraceStore implements TraceStore {
 export function createFilesystemTraceStore(options: FilesystemTraceOptions): FilesystemTraceStore {
   return new FilesystemTraceStore(options);
 }
+
+export { createGuardedFilesystemTraceStore, GuardedFilesystemTraceStore, TraceStorageError, TRACE_RETENTION_MS } from './guardedTrace/index.js';
+export type { GuardedTraceOptions, TraceStorageHealth, TraceStorageReceipt, TraceStorageGapReceipt, TraceStorageCode } from './guardedTrace/index.js';

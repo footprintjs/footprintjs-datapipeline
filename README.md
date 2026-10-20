@@ -410,3 +410,11 @@ Drill-down creates a new saved read; equal aggregate values cannot certify uncha
 underlying rows. Application adapters own measurement meanings, calculation matching
 tests, historical relationships, claim gates and access checks. See the
 [reader contract](docs/INFLUXDB_READER.md) for bounds, templates and limitations.
+
+## Optional trace storage safeguards
+
+The [guarded gzip trace store](docs/TRACE_STORAGE_BUDGET.md) adds explicit disk
+budgets, fixed-code gaps, reserved headroom and bounded thirty-day trace expiry.
+It is absent unless explicitly enabled, starts no timer, and changes no existing
+store. [Synthetic PowerScale sizing](docs/POWERSCALE_STORAGE_MEASUREMENT.md)
+records the reported settings, compatibility blockers and deployment limits.

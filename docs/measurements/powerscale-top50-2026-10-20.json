@@ -1,0 +1,90 @@
+{
+  "provenance": "LOCAL SEED; synthetic saved responses; no device, database or deployment",
+  "settings": {
+    "topN": 50,
+    "sentinels": [
+      "25"
+    ],
+    "reportedPageLimit": 100,
+    "clusters": 14,
+    "intervalSeconds": 5
+  },
+  "profiles": [
+    {
+      "returnedRows": 50,
+      "counts": {
+        "seen": 50,
+        "selected": 50,
+        "excluded": 0,
+        "rejected": 0,
+        "admitted": 50
+      },
+      "sourceResponseBytes": 24243,
+      "data": {
+        "bytes": 202243,
+        "allocated": 360448,
+        "count": 75
+      },
+      "compressedTraces": {
+        "bytes": 50578,
+        "allocated": 53248,
+        "count": 2
+      },
+      "uncompressedTraces": {
+        "bytes": 1268502,
+        "allocated": 1269760,
+        "count": 2
+      },
+      "reopenedTraces": 2,
+      "elapsedMs": 563.0791669999999,
+      "illustrativeFleetDataAndTraceGbDay": 61.16245632,
+      "illustrativeFleetDataAndTraceTb30Days": 1.8348736896
+    },
+    {
+      "returnedRows": 256,
+      "counts": {
+        "seen": 256,
+        "selected": 154,
+        "excluded": 102,
+        "rejected": 0,
+        "admitted": 154
+      },
+      "sourceResponseBytes": 125452,
+      "data": {
+        "bytes": 618011,
+        "allocated": 966656,
+        "count": 179
+      },
+      "compressedTraces": {
+        "bytes": 217193,
+        "allocated": 221184,
+        "count": 2
+      },
+      "uncompressedTraces": {
+        "bytes": 6194230,
+        "allocated": 6197248,
+        "count": 2
+      },
+      "reopenedTraces": 2,
+      "elapsedMs": 2226.724666,
+      "illustrativeFleetDataAndTraceGbDay": 202.05255168,
+      "illustrativeFleetDataAndTraceTb30Days": 6.0615765504
+    }
+  ],
+  "limitations": [
+    "Not a real deployed-row-count measurement or service throughput benchmark.",
+    "Current writer max top-N is 25; experiment copy raises only that admission constant to 50. Product source unchanged.",
+    "Reported page-limit setting is not referenced in this repository collector and is not simulated as 100 rows or pages.",
+    "No 30-day dataset generated; day/month amounts are linear workload illustrations."
+  ],
+  "currentWriter": {
+    "status": "refused",
+    "name": "Error",
+    "message": "PowerScale client compatibility input was refused."
+  },
+  "verification": {
+    "currentMainPythonBlob": "39c6eec106bd286149a219eb29ac92d5a9f9bda8",
+    "currentMainNodeTopNLimit": 25,
+    "currentMainPythonMentionsReportedPageLimit": false
+  }
+}

@@ -49,8 +49,8 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "footprintjs": "10.1.0",
-    "foottrace": "1.4.0"
+    "footprintjs": "10.2.1",
+    "foottrace": "1.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

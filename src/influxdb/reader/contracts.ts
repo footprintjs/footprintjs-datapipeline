@@ -22,9 +22,13 @@ export interface InfluxReadReceipt {
   readonly sourceMutable: true;
   /** Aggregate-only reads cannot prove whether contributing source rows change later. */
   readonly sourceRowsFingerprint: 'not-captured';
+  /** Effective enforced bounds, also present when the request fails. */
+  readonly limits: { readonly maxRows: number; readonly maxBytes: number; readonly maxWindowMs: number; readonly timeoutMs: number };
   readonly rowCount: number;
   readonly code?: InfluxReadCode;
   readonly httpStatus?: number;
+  /** Bounded server reference only; response/error bodies are never persisted. */
+  readonly requestId?: string;
   readonly bucket?: string;
   readonly org?: string;
   readonly templateRef?: VersionedRef;

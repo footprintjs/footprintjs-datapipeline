@@ -77,6 +77,10 @@ No usable partial prefix or source exception text is returned.
 Each read returns immutable rows and one receipt. The receipt names the template
 revision, exact expanded query and settings, configured bucket/org, requested
 window, dispatch status, request/finish clocks, row count and fixed error code.
+Every receipt, including failed or refused reads, records the effective
+`limits: { maxRows, maxBytes, maxWindowMs, timeoutMs }`. A limit failure returns
+no rows and never a complete prefix. HTTP failures also retain the status and
+a bounded request ID when supplied; private error bodies are withheld.
 Success includes the SHA-256 of response bytes and of canonical decoded rows.
 The source adapter saves each returned row once as an ordinary observation; the
 receipt belongs in its existing batch evidence details. It does not repeat all

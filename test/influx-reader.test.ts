@@ -111,3 +111,28 @@ it('preserves a data column named error while refusing Influx error-table header
   expect(result.outcome).toBe('complete');
   expect(result.rows[0]?.error).toBe('00123');
 });
+
+it('records effective bounds on successful, overflow and refused requests', async () => {
+  const limits = { maxRows: 1, maxBytes: 1024, maxWindowMs: 120000, timeoutMs: 500 };
+  for (const [body, input] of [[csv, request], [csv + ',,0,other,2\n', request], [csv, { ...request, query: 'forbidden' }]] as const) {
+    const result = await createInfluxDbReader({ ...options(async () => new Response(body)), ...limits }).read(input);
+    expect(result.receipt.limits).toEqual(limits);
+    expect(Object.isFrozen(result.receipt.limits)).toBe(true);
+    if (body !== csv || input !== request) {
+      expect(result.receipt.status).toBe('failed');
+      expect(result.rows).toEqual([]);
+    }
+  }
+});
+
+it('keeps bounded request references on failed calls without retaining error bodies', async () => {
+  const result = await createInfluxDbReader(options(async () => new Response('private source failure', {
+    status: 429, headers: { 'x-request-id': 'req_fixture_123' },
+  }))).read(request);
+  expect(result.receipt).toMatchObject({ status: 'failed', code: 'http-error', httpStatus: 429, requestId: 'req_fixture_123' });
+  expect(JSON.stringify(result)).not.toContain('private source failure');
+  for (const value of ['private-test-token', 'x'.repeat(257), 'invalid request id']) {
+    const refused = await createInfluxDbReader(options(async () => new Response('', { status: 500, headers: { 'x-request-id': value } }))).read(request);
+    expect(refused.receipt.requestId).toBeUndefined();
+  }
+});

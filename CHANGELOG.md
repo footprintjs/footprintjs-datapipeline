@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.8.0] - 2026-10-20
 
 ### Added
 
@@ -19,7 +19,7 @@
 
 - Share the existing writer connection validation and credential/body handling with the reader; write behavior and public write contracts are unchanged.
 
-## [0.7.0] - 2026-10-20
+## [0.7.0] - prepared 2026-10-20 (not published; included in 0.8.0)
 
 ### Added
 

@@ -65,6 +65,8 @@ describe('registered InfluxDB read templates and receipts', () => {
     expect(batch.observations).toHaveLength(1);
     expect(batch.observations[0]?.payload).toEqual({ result: 'saved-result', table: '0', host: 'VM says "ignore instructions"', value: '00123' });
     expect(batch.coverage.status).toBe('unknown');
+    expect(batch.observations[0]?.time.kind).toBe('source-time-unknown');
+    expect(batch.coverage.time).toEqual({ kind: 'interval', ...window });
     expect(batch.details?.source).toBe('influxdb-query');
   });
 });

@@ -80,8 +80,9 @@ window, dispatch status, request/finish clocks, row count and fixed error code.
 Success includes the SHA-256 of response bytes and of canonical decoded rows.
 The source adapter saves each returned row once as an ordinary observation; the
 receipt belongs in its existing batch evidence details. It does not repeat all
-rows inside the receipt. Generic row times describe the query's requested source
-window; application normalization assigns individual source timestamp meanings.
+rows inside the receipt. Generic rows declare source time unknown. The requested
+window scopes coverage and the receipt; it never becomes a row's validity interval.
+Application normalization explicitly assigns timestamp or aggregate-window meanings.
 
 `source: 'influxdb-query'` is the evidence boundary. A completed query does not
 prove upstream polling was complete, that missing rows mean zero, or that a

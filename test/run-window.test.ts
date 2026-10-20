@@ -167,3 +167,12 @@ it('names an invalid saved contribution as invalid data without hiding other pol
  const result=await apply(f,inputs);expect(result.observations[0]!.payload).toMatchObject({statistics:{count:1,mean:40,invalidCount:1}});
  expect((object(result.observations[0]!.payload).gaps as JsonValue[]).some(g=>object(g).reason==='invalid-data')).toBe(true);
 });
+
+it('uses the existing metric normalizer for equivalent threshold orderings',async()=>{
+ const f=await fixture([0]);const inputs=await loaded(f);const configured={...metric,gtThresholds:[50,25]};
+ const sample=inputs[0]!.observations[1]!;
+ inputs[0]!.observations[1]=changedPayload(sample,{...object(sample.payload),metric:JSON.parse(JSON.stringify(configured))});
+ const transform=createRunWindowEvidenceTransform({...f.options,metric:configured,enabled:true})!;
+ const value=await transform.apply(inputs,{...f.request,methodRef:transform.ref},{signal:new AbortController().signal,operationId:'normalized-metric',startedAt:end,now:()=>end});
+ expect(value.observations[0]!.payload).toMatchObject({statistics:{count:1,mean:20,metric:{gtThresholds:[25,50]}}});
+});

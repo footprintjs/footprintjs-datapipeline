@@ -1,6 +1,6 @@
 import type { BatchInput, DeriveRequest, Observation, JsonObject } from '../contracts.js';
 import { canonical, ensure } from '../validation.js';
-import { numericInstant, numericJson } from '../statistics/numericStatistics.js';
+import { numericInstant, numericJson, checkedMetric, type NumericMetricDefinition } from '../statistics/numericStatistics.js';
 import { MAX_RUN_WINDOW_INPUTS, MAX_RUN_WINDOW_SLOTS, RUN_CONTRIBUTION_SCHEMA, RUN_RECEIPT_SCHEMA, type RunSlot, type RunWindowEvidenceOptions } from './contracts.js';
 
 function object(value: unknown, limit: number): JsonObject {
@@ -56,7 +56,7 @@ export function admitWindow(inputs: readonly BatchInput[], request: DeriveReques
       const sample = object(contribution.payload, 40 * 1024);
       ensure(sample && typeof sample === 'object' && !Array.isArray(sample), 'Contribution payload');
       ensure(Object.keys(sample).every(key => ['receiptKey', 'metric', 'status', 'value'].includes(key))
-        && sample.receiptKey === receipt.key && matches(sample.metric, options.metric), 'Contribution identity');
+        && sample.receiptKey === receipt.key && matches(checkedMetric(sample.metric as unknown as NumericMetricDefinition), options.metric), 'Contribution identity');
       ensure(['valid', 'missing', 'invalid'].includes(String(sample.status)), 'Contribution status');
       ensure(sample.status === 'valid' ? typeof sample.value === 'number' && Number.isFinite(sample.value) : sample.value === undefined, 'Contribution value');
       const capturedAt = numericInstant(contribution.collectedAt);

@@ -104,3 +104,10 @@ it('bounds request shapes before walking or copying nested application data', as
   ]) expect((await reader.read(bad)).receipt.code).toBe('invalid-request');
   expect(credentials).toBe(0);
 });
+
+it('preserves a data column named error while refusing Influx error-table headers', async () => {
+  const reader = createInfluxDbReader(options(async () => new Response(csv.replace('host,value', 'host,error'))));
+  const result = await reader.read(request);
+  expect(result.outcome).toBe('complete');
+  expect(result.rows[0]?.error).toBe('00123');
+});

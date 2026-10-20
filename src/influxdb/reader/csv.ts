@@ -13,7 +13,7 @@ export function parseInfluxCsv(text: string, maxRows: number): readonly Readonly
     }
     if (!header) {
       const valid = cells[0] === '' && cells[1] === 'result' && cells[2] === 'table';
-      if (!valid || cells.includes('error') || new Set(cells).size !== cells.length || cells.some(key => key.length > 1024)) throw new ReadFault('invalid-response');
+      if (!valid || new Set(cells).size !== cells.length || cells.some(key => key.length > 1024)) throw new ReadFault('invalid-response');
       header = cells; return;
     }
     if (cells.length !== header.length) throw new ReadFault('invalid-response');

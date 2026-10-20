@@ -127,6 +127,12 @@ The optional `/filesystem` subpath provides a reference repository and trace sto
 
 This backend targets one host and a modest number of operations on a local POSIX filesystem with atomic directory rename and working `fsync`. Record lookup scans published manifests. It is not a distributed storage service or a tamper-evident archive. External artifact references are rejected because this backend does not verify their bytes; use inline payloads or supply an artifact-aware repository.
 
+For new operations, `createFilesystemRepository({ directory, packing: 'gzip' })`
+optionally stores each atomic batch, observations and evidence in one bounded
+gzip bundle. Packing defaults off; upgraded readers read both formats, and
+existing references/records are never rewritten. Upgrade every reader before
+enabling it. See [packed repository bounds, durability and measurements](docs/PACKED_REPOSITORY.md).
+
 The filesystem trace store also offers `read(traceRef)` for inspecting a stored trace. Full traces may contain plugin inputs and outputs, so choose their storage location and retention policy accordingly.
 
 Pass `compression: 'gzip'` to `createFilesystemTraceStore` to compress new trace

@@ -41,7 +41,8 @@
     "LICENSE",
     "docs/TRACE_STORAGE_BUDGET.md",
     "docs/POWERSCALE_STORAGE_MEASUREMENT.md",
-    "docs/measurements"
+    "docs/measurements",
+    "docs/PACKED_REPOSITORY.md"
   ],
   "sideEffects": false,
   "scripts": {

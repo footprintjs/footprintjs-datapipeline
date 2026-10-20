@@ -179,3 +179,35 @@ it('uses the existing metric normalizer for equivalent threshold orderings',asyn
  const value=await transform.apply(inputs,{...f.request,methodRef:transform.ref},{signal:new AbortController().signal,operationId:'normalized-metric',startedAt:end,now:()=>end});
  expect(value.observations[0]!.payload).toMatchObject({statistics:{count:1,mean:20,metric:{gtThresholds:[25,50]}}});
 });
+
+it('bulk and scalar repositories produce identical saved summaries and exact support', async () => {
+ const f = await fixture();
+ const bulk = await summary(f);
+ const scalar = createPipeline({
+  sources: [source], adapters: [], transforms: [f.transform], clock: () => end,
+  repository: {
+   read: ref => f.repository.read(ref),
+   findOperation: id => f.repository.findOperation(id),
+   commit: write => f.repository.commit(write),
+  },
+ });
+ const result = await scalar.derive({ ...f.request, idempotencyKey: 'scalar-parity' });
+ expect(result.commit.status).toBe('committed');
+ const saved = await scalar.read(result.commit.observationRefs![0]!);
+ expect(saved?.kind).toBe('observation');
+ if (saved?.kind !== 'observation') throw Error('Expected summary');
+ expect(saved.payload).toEqual(bulk.payload);
+ expect(saved.support).toEqual(bulk.support);
+});
+
+it('bulk replies cannot silently omit an expected observation', async () => {
+ const f = await fixture();
+ const original = f.repository.readMany.bind(f.repository);
+ f.repository.readMany = async refs => {
+  const values = await original(refs);
+  return refs[0]?.kind === 'observation' ? values.map(() => undefined) : values;
+ };
+ const result = await f.pipeline.derive(f.request);
+ expect(result.commit.status).toBe('failed');
+ expect(result.commit.observationRefs).toBeUndefined();
+});

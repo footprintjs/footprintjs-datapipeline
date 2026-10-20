@@ -419,3 +419,9 @@ saved run receipts and per-series compact observations, reusing native Footprint
 steps, shared requirement records and numeric statistics. Missing polls remain
 individual gaps, not zeros. See [the contract and adoption boundary](docs/RUN_WINDOW_EVIDENCE.md).
 This adds no timer, retention deletion, device adapter or automatic app wiring.
+
+Optional `Repository.readMany(refs)` accelerates derivation in chunks of at most
+`MAX_REPOSITORY_READ_BATCH` (256). It must return one result per reference, in
+order, including `undefined` for missing entries, with the same validation as
+`read`. It provides no snapshot guarantee. Existing scalar-only ports work
+unchanged. See [run/window timing measurements](docs/RUN_WINDOW_TIMING.md).

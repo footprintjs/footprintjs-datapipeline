@@ -10,6 +10,8 @@
 
 ### Changed
 
+- Derivation can use an optional bounded repository bulk-read capability. Filesystem lookup validates each requested record while scanning manifests once per chunk, avoiding repeated manifest scans for large saved windows. Scalar-only ports and existing saved records remain supported.
+
 - Share the existing writer connection validation and credential/body handling with the reader; write behavior and public write contracts are unchanged.
 
 ## [0.7.0] - 2026-10-20

@@ -39,7 +39,8 @@
     "docs/INFLUXDB_HOST_RECEIPTS.md",
     "README.md",
     "LICENSE",
-    "docs/RUN_WINDOW_EVIDENCE.md"
+    "docs/RUN_WINDOW_EVIDENCE.md",
+    "docs/RUN_WINDOW_TIMING.md"
   ],
   "sideEffects": false,
   "scripts": {

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import type {
   CommitReceipt, RecordRef, StoredRecord, TraceRecord, TraceRef,
 } from '../contracts.js';
-import type { CommitWrite, OperationCommit, Repository, TraceStore } from '../ports.js';
+import { MAX_REPOSITORY_READ_BATCH, type CommitWrite, type OperationCommit, type Repository, type TraceStore } from '../ports.js';
 import { canonical } from '../validation.js';
 import { compressTrace, readGzipTrace, MAX_COMPRESSED_TRACE_CONTENT_BYTES } from './traceCompression.js';
 
@@ -39,6 +39,8 @@ interface Manifest {
   readonly receipt: CommitReceipt;
   readonly records: readonly Entry[];
 }
+
+const MAX_RECORD_READ_CONCURRENCY = 8;
 
 const digest = (text: string | Uint8Array): string => createHash('sha256').update(text).digest('hex');
 const sameRef = (a: RecordRef, b: RecordRef): boolean => a.kind === b.kind && a.id === b.id;
@@ -213,6 +215,34 @@ export class FilesystemRepository implements Repository {
       foundHash = entry.sha256;
     }
     return found;
+  }
+
+  /** One bounded request; manifests are not cached between calls. */
+  async readMany(refs: readonly RecordRef[]): Promise<readonly (StoredRecord | undefined)[]> {
+    if (!Array.isArray(refs) || refs.length > MAX_REPOSITORY_READ_BATCH || refs.some(ref => !validRef(ref))) {
+      throw new FilesystemRepositoryError('invalid_reference', 'A bounded list of valid record references is required.');
+    }
+    if (!refs.length) return [];
+    let names: string[];
+    try { names = await readdir(this.operations); }
+    catch (error) { if (isMissing(error)) return refs.map(() => undefined); throw error; }
+    const wanted = new Set(refs.map(refKey));
+    const found = new Map<string, { hash: string; record: StoredRecord }>();
+    for (const name of names.filter(name => /^[a-f0-9]{64}$/.test(name)).sort()) {
+      const directory = join(this.operations, name);
+      const manifest = await this.manifest(directory);
+      const entries = manifest.records.filter(entry => wanted.has(refKey(entry.ref)));
+      // Bound file concurrency without skipping any duplicate-copy hash check.
+      for (let i = 0; i < entries.length; i += MAX_RECORD_READ_CONCURRENCY) {
+        const results = await Promise.all(entries.slice(i, i + MAX_RECORD_READ_CONCURRENCY).map(async entry => ({ entry, record: await this.record(directory, entry) })));
+        for (const { entry, record } of results) {
+          const key = refKey(entry.ref), previous = found.get(key);
+          if (previous && previous.hash !== entry.sha256) corrupt('A reference names conflicting records in different operations.');
+          found.set(key, { hash: entry.sha256, record });
+        }
+      }
+    }
+    return refs.map(ref => found.get(refKey(ref))?.record);
   }
 
   private existing(operation: OperationCommit, fingerprint: string): CommitReceipt {

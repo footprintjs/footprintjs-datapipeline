@@ -140,3 +140,9 @@ and one partial capture. It reopens the saved native trace with foottrace cause
 tools, verifies statistic → contribution → receipt links, and writes `report.json`.
 There are 58 valid numeric inputs and three explicit gaps. No device, database
 server, model call or Python process runs. The fixture omits raw archives deliberately.
+
+## Timing and capacity measurement
+
+See [the timing review](RUN_WINDOW_TIMING.md) for separate fixture-ingestion,
+repository-read and native-flow measurements at 64 slots / 8,192 observations,
+and the bounded bulk-read optimization.

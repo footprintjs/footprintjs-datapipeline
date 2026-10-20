@@ -23,7 +23,7 @@ export function createRunWindowEvidenceTransform(options: RunWindowEvidenceOptio
         ensure(canonical(request.methodRef) === canonical(ref), 'Method revision');
         const { slots, knowledgeCutoff } = admitWindow(inputs, request, admitted);
         const windowRef = 'run-window:' + createHash('sha256').update(canonical({ methodRef: ref, window: request.window, knowledgeCutoff })).digest('hex');
-        const result = await runWindowFlow({ operationId: context.operationId, chart: evidenceChart(slots, admitted, windowRef),
+        const result = await runWindowFlow({ operationId: context.operationId, chart: evidenceChart(slots, admitted, windowRef, knowledgeCutoff),
           signal: context.signal, clock: context.now, ...(options.traceStore ? { traceStore: options.traceStore } : {}) });
         const state = result.record.sharedState;
         const gaps = state.gaps as unknown[];

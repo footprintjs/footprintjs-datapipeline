@@ -7,14 +7,18 @@ import type { RunSlot, RunWindowEvidenceOptions } from './contracts.js';
 type Scope = Record<string, unknown>;
 const payload = (value: unknown) => value as JsonObject;
 const optionalPayload = (value: unknown) => value as JsonObject | null;
-export function evidenceChart(slots: readonly RunSlot[], options: RunWindowEvidenceOptions, windowRef: string) {
+export function evidenceChart(slots: readonly RunSlot[], options: RunWindowEvidenceOptions, windowRef: string, knowledgeCutoff: string) {
   let chart = flowChart<Scope>('Record declared series and schedule policy', scope => {
     scope.metric = options.metric;
+    scope.schedule = { anchorAt: options.anchorAt, intervalMs: options.intervalMs,
+      start: slots[0]!.at, expectedSlots: slots.length, windowRef, knowledgeCutoff };
   }, 'run-window-policy');
   for (const [i, slot] of slots.entries()) {
     chart = chart.addFunction('Import saved poll receipt', scope => {
+      const schedule = payload(scope.schedule);
+      const slotAt = new Date(Date.parse(String(schedule.start)) + i * Number(schedule.intervalMs)).toISOString();
       scope[`receipt_${i}`] = slot.receipt
-        ? { ...payload(slot.receipt.payload), inputRef: slot.receipt.ref } : { status: 'not-collected', slotAt: slot.at };
+        ? { ...payload(slot.receipt.payload), inputRef: slot.receipt.ref } : { status: 'not-collected', slotAt };
     }, `receipt-${i}`).addFunction('Import saved compact contribution', scope => {
       const receipt = payload(scope[`receipt_${i}`]);
       scope[`input_${i}`] = slot.contribution ? { ...payload(slot.contribution.payload),
@@ -44,7 +48,8 @@ export function evidenceChart(slots: readonly RunSlot[], options: RunWindowEvide
   }, 'statistics').addFunction('Count scheduled poll gaps independently of numeric values', scope => {
     let receivedPolls = 0, missingPolls = 0, failedPolls = 0, partialPolls = 0, emptyPolls = 0;
     const gaps: RequirementResult[] = [];
-    for (let i = 0; i < slots.length; i++) {
+    const expectedSlots = Number(payload(scope.schedule).expectedSlots);
+    for (let i = 0; i < expectedSlots; i++) {
       const receipt = payload(scope[`receipt_${i}`]);
       if (receipt.status === 'not-collected') missingPolls++; else receivedPolls++;
       if (receipt.status === 'failed') failedPolls++;
@@ -53,7 +58,7 @@ export function evidenceChart(slots: readonly RunSlot[], options: RunWindowEvide
       const result = scope[`requirement_${i}`] as RequirementResult;
       if (result.state === 'unresolved') gaps.push(result);
     }
-    scope.coverage = { expectedPolls: slots.length, receivedPolls, missingPolls, failedPolls, partialPolls, emptyPolls, continuous: 'unknown' };
+    scope.coverage = { expectedPolls: expectedSlots, receivedPolls, missingPolls, failedPolls, partialPolls, emptyPolls, continuous: 'unknown' };
     scope.gaps = gaps;
   }, 'coverage').build();
 }

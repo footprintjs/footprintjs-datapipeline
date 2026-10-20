@@ -109,6 +109,9 @@ it('cause tools follow statistics to the exact saved contribution and its receip
  const context={signal:new AbortController().signal};
  const parents=await graph.parents(node('statistics'),context);
  expect(parents.edges).toContainEqual(expect.objectContaining({nodeId:node('input_0'),kind:'data',attribution:'per-write'}));
+ const receiptParents=await graph.parents(node('receipt_1'),context);
+ expect(receiptParents.edges).toContainEqual(expect.objectContaining({nodeId:node('schedule'),kind:'data'}));
+ expect(record.sharedState.schedule).toMatchObject({intervalMs:5000,expectedSlots:60,knowledgeCutoff:end});
  const inputParents=await graph.parents(node('input_0'),context);
  expect(inputParents.edges).toContainEqual(expect.objectContaining({nodeId:node('receipt_0'),kind:'data'}));
  const input=object(record.sharedState.input_0);expect(await f.pipeline.read(input.inputRef as unknown as import('../src/contracts.js').ObservationRef)).toMatchObject({schemaRef:RUN_CONTRIBUTION_SCHEMA,payload:{value:20}});

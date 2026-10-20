@@ -96,7 +96,7 @@ also apply. No ceiling is increased by this feature.
   the series, window and cutoff identity. The payload exposes `windowRef`. Applications
   still must apply their existing claim gate when asserting completeness; this
   transform grants no authority and changes no agent output guard.
-- Ordinary Footprint steps import one receipt and contribution per slot, record
+- Ordinary Footprint steps record the schedule and cutoff, import one receipt and contribution per slot, record
   a named `decide()` completeness rule, and derive numbers separately from gap
   counts. Per-write read provenance is enabled by `runWindowFlow`. Its stored
   native trace can be opened by existing foottrace cause tools. References point

@@ -48,7 +48,9 @@ it('saves an exact-input summary, keeps 58 missing polls as gaps, and reopens un
 });
 it('keeps a failed run as an explicit gap without removing other statistics',async()=>{const f=await fixture([0],'failed');const saved=await summary(f);expect(saved.payload).toMatchObject({statistics:{count:0,mean:null},coverage:{failedPolls:1,missingPolls:59}});expect((object(saved.payload).gaps as JsonValue[]).some(g=>object(g).reason==='unavailable')).toBe(true);});
 it('rejects a changed cutoff under the same operation identity',async()=>{const f=await fixture();await summary(f);const result=await f.pipeline.derive({...f.request,request:{knowledgeCutoff:'2026-10-20T12:06:00.000Z'}});expect(result.commit.status).toBe('failed');});
-it('all sixty polls fit the native record bound without inventing coverage',async()=>{const f=await fixture(Array.from({length:60},(_,i)=>i));const saved=await summary(f);expect(saved.payload).toMatchObject({statistics:{count:60},coverage:{expectedPolls:60,receivedPolls:60,missingPolls:0,continuous:'unknown'}});expect(Buffer.byteLength(JSON.stringify(f.traces[0]))).toBeLessThan(6*1024*1024);});
+// These capacity cases perform hundreds of durable filesystem publications.
+// Their budget covers fixture ingestion, not a relaxed product/performance assertion.
+it('all sixty polls fit the native record bound without inventing coverage',async()=>{const f=await fixture(Array.from({length:60},(_,i)=>i));const saved=await summary(f);expect(saved.payload).toMatchObject({statistics:{count:60},coverage:{expectedPolls:60,receivedPolls:60,missingPolls:0,continuous:'unknown'}});expect(Buffer.byteLength(JSON.stringify(f.traces[0]))).toBeLessThan(6*1024*1024);}, 30_000);
 
 async function loaded(f: Awaited<ReturnType<typeof fixture>>) {
  return Promise.all(f.request.inputBatchRefs.map(async ref => {
@@ -144,7 +146,7 @@ it('the maximum 64-slot partition fits comfortably for the declared synthetic pr
  expect(saved.payload).toMatchObject({statistics:{count:64},coverage:{expectedPolls:64,missingPolls:0}});
  const bytes=Buffer.byteLength(JSON.stringify(f.traces[0]));
  expect(bytes).toBeLessThan(6*1024*1024);console.info(`LOCAL SEED 64-slot native record: ${bytes} bytes`);
-});
+}, 30_000);
 it('a failed native trace save does not erase the summary inputs or numbers',async()=>{
  const f=await fixture([0]);const inputs=await loaded(f);
  const transform=createRunWindowEvidenceTransform({...f.options,enabled:true,traceStore:{async store(){throw Error('private-secret-marker');}}})!;

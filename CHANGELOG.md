@@ -4,6 +4,8 @@
 
 ### Added
 
+- Add an opt-in saved run/window evidence transform: exact contribution support, named native completeness decisions, knowledge-cutoff assessments and individual missing-poll gaps. It starts no collector and performs no retention deletion. Existing callers are unchanged.
+
 - Optional InfluxDB reader and source adapter with registered versioned templates, literal bindings, bounded responses and fixed read diagnostics. Saved query rows use ordinary observations and one database-boundary receipt, with explicit mutable-source and unknown upstream coverage semantics. Database calculation delegation remains application-owned and requires matching tests.
 
 ### Changed

@@ -410,3 +410,12 @@ Drill-down creates a new saved read; equal aggregate values cannot certify uncha
 underlying rows. Application adapters own measurement meanings, calculation matching
 tests, historical relationships, claim gates and access checks. See the
 [reader contract](docs/INFLUXDB_READER.md) for bounds, templates and limitations.
+
+## Opt-in run/window evidence
+
+`createRunWindowEvidenceTransform()` returns nothing unless `enabled: true`.
+When explicitly registered, it derives bounded collection-clock windows from
+saved run receipts and per-series compact observations, reusing native Footprint
+steps, shared requirement records and numeric statistics. Missing polls remain
+individual gaps, not zeros. See [the contract and adoption boundary](docs/RUN_WINDOW_EVIDENCE.md).
+This adds no timer, retention deletion, device adapter or automatic app wiring.

@@ -11,3 +11,6 @@ export { summarizeNumericSamples, mergeNumericStatistics, NUMERIC_STATISTICS_REF
 export type { NumericMetricDefinition, NumericSample, NumericAnchor, NumericSupport, NumericStatistics } from './statistics/numericStatistics.js';
 export { compareNumericWindows, NUMERIC_WINDOW_COMPARISON_REF } from './statistics/numericComparison.js';
 export type { NumericWindow, NumericComparisonPolicy, NumericComparisonReason, NumericWindowEvidence, NumericWindowComparison } from './statistics/numericComparison.js';
+export { createRunWindowEvidenceTransform } from './runWindow/transform.js';
+export { RUN_RECEIPT_SCHEMA, RUN_CONTRIBUTION_SCHEMA, MAX_RUN_WINDOW_SLOTS, MAX_RUN_WINDOW_INPUTS, RunWindowEvidenceError } from './runWindow/contracts.js';
+export type { RunWindowEvidenceOptions, RunReceiptPayload, RunReceiptStatus, RunContributionPayload } from './runWindow/contracts.js';

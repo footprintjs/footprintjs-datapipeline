@@ -5,6 +5,9 @@
 ### Added
 
 - Add an opt-in saved run/window evidence transform: exact contribution support, named native completeness decisions, knowledge-cutoff assessments and individual missing-poll gaps. It starts no collector and performs no retention deletion. Existing callers are unchanged.
+- Optional, default-off packed filesystem operations, preserving logical records/references and atomic publication. Readers support old and packed operations with bounded decompression, hash verification and no migration. Reader-first rollout and actual synthetic writer measurements are documented; repository retention and application adoption are unchanged.
+
+- Optional guarded gzip trace store with allocated-byte quotas, free-space/receipt headroom, durable pressure gaps and independent health events. Thirty-day trace expiry uses bounded explicit maintenance and preserves small expiry receipts; no collector, timer, archive policy or default activation changes.
 
 - Optional InfluxDB reader and source adapter with registered versioned templates, literal bindings, bounded responses and fixed read diagnostics. Saved query rows use ordinary observations and one database-boundary receipt, with explicit mutable-source and unknown upstream coverage semantics. Database calculation delegation remains application-owned and requires matching tests.
 

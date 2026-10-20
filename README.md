@@ -127,6 +127,12 @@ The optional `/filesystem` subpath provides a reference repository and trace sto
 
 This backend targets one host and a modest number of operations on a local POSIX filesystem with atomic directory rename and working `fsync`. Record lookup scans published manifests. It is not a distributed storage service or a tamper-evident archive. External artifact references are rejected because this backend does not verify their bytes; use inline payloads or supply an artifact-aware repository.
 
+For new operations, `createFilesystemRepository({ directory, packing: 'gzip' })`
+optionally stores each atomic batch, observations and evidence in one bounded
+gzip bundle. Packing defaults off; upgraded readers read both formats, and
+existing references/records are never rewritten. Upgrade every reader before
+enabling it. See [packed repository bounds, durability and measurements](docs/PACKED_REPOSITORY.md).
+
 The filesystem trace store also offers `read(traceRef)` for inspecting a stored trace. Full traces may contain plugin inputs and outputs, so choose their storage location and retention policy accordingly.
 
 Pass `compression: 'gzip'` to `createFilesystemTraceStore` to compress new trace
@@ -425,3 +431,10 @@ Optional `Repository.readMany(refs)` accelerates derivation in chunks of at most
 order, including `undefined` for missing entries, with the same validation as
 `read`. It provides no snapshot guarantee. Existing scalar-only ports work
 unchanged. See [run/window timing measurements](docs/RUN_WINDOW_TIMING.md).
+## Optional trace storage safeguards
+
+The [guarded gzip trace store](docs/TRACE_STORAGE_BUDGET.md) adds explicit disk
+budgets, fixed-code gaps, reserved headroom and bounded thirty-day trace expiry.
+It is absent unless explicitly enabled, starts no timer, and changes no existing
+store. [Synthetic PowerScale sizing](docs/POWERSCALE_STORAGE_MEASUREMENT.md)
+records the reported settings, compatibility blockers and deployment limits.

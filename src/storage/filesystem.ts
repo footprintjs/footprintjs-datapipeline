@@ -7,10 +7,22 @@ import type {
 import { MAX_REPOSITORY_READ_BATCH, type CommitWrite, type OperationCommit, type Repository, type TraceStore } from '../ports.js';
 import { canonical } from '../validation.js';
 import { compressTrace, readGzipTrace, MAX_COMPRESSED_TRACE_CONTENT_BYTES } from './traceCompression.js';
+import { PackedReads } from './packedReads.js';
+import { readOperationEncoding } from './operationEncoding.js';
+import { FilesystemRepositoryError } from './filesystemError.js';
+export { FilesystemRepositoryError } from './filesystemError.js';
+import { encodePackedOperation, readPackedOperation, PACKED_OPERATION_FILE, MAX_PACKED_OPERATION_BYTES, type PackedOperation } from './packedOperation.js';
 
 export interface FilesystemOptions {
   /** Explicit storage location; there is no implicit in-memory fallback. */
   readonly directory: string;
+}
+
+export interface FilesystemRepositoryOptions extends FilesystemOptions {
+  /** New operations only; upgrade all readers before enabling. Default: none. */
+  readonly packing?: 'none' | 'gzip';
+  /** Packed content limit before encoding and during inflate; may lower 16 MiB. */
+  readonly maxPackedBytes?: number;
 }
 
 export interface FilesystemTraceOptions extends FilesystemOptions {
@@ -18,13 +30,6 @@ export interface FilesystemTraceOptions extends FilesystemOptions {
   readonly compression?: 'none' | 'gzip';
   /** Gzip content ceiling, before compression and during decompression; may lower 16 MiB. */
   readonly maxTraceBytes?: number;
-}
-
-export class FilesystemRepositoryError extends Error {
-  constructor(readonly code: string, message: string) {
-    super(message);
-    this.name = 'FilesystemRepositoryError';
-  }
 }
 
 interface Entry {
@@ -137,17 +142,25 @@ function checkedWrite(write: CommitWrite): StoredRecord[] {
 export class FilesystemRepository implements Repository {
   readonly directory: string;
   private readonly operations: string;
+  private readonly packing: 'none' | 'gzip';
+  private readonly maxPackedBytes: number;
+  private readonly packedReads: PackedReads<PackedOperation<Manifest>>;
 
-  constructor(options: FilesystemOptions) {
+  constructor(options: FilesystemRepositoryOptions) {
     if (!options.directory) throw new FilesystemRepositoryError('invalid_directory', 'An explicit directory is required.');
+    this.packing = options.packing ?? 'none';
+    this.maxPackedBytes = options.maxPackedBytes ?? MAX_PACKED_OPERATION_BYTES;
+    if (!['none', 'gzip'].includes(this.packing) || !Number.isSafeInteger(this.maxPackedBytes) || this.maxPackedBytes < 1 || this.maxPackedBytes > MAX_PACKED_OPERATION_BYTES) {
+      throw new FilesystemRepositoryError('invalid_repository_options', 'Packed repository options are invalid.');
+    }
     this.directory = resolve(options.directory);
     this.operations = join(this.directory, 'operations');
+    this.packedReads = new PackedReads(path => readPackedOperation<Manifest>(path, this.maxPackedBytes));
   }
 
-  private async manifest(operationDirectory: string): Promise<Manifest> {
-    let value: Manifest;
-    try { value = JSON.parse(await readFile(join(operationDirectory, 'manifest.json'), 'utf8')) as Manifest; }
-    catch (error) { if (isMissing(error)) throw error; return corrupt('A published operation manifest is unreadable.'); }
+  private async operation(operationDirectory: string): Promise<{ manifest: Manifest; packed?: ReadonlyMap<string, string> }> {
+    const loaded = await readOperationEncoding(operationDirectory, this.packedReads);
+    const value = loaded.manifest;
     if (value?.version !== 1 || typeof value.operationId !== 'string' || typeof value.fingerprint !== 'string' ||
         value.receipt?.operationId !== value.operationId || value.receipt.status !== 'committed' ||
         !Array.isArray(value.records) || value.records.length < 2 ||
@@ -159,12 +172,16 @@ export class FilesystemRepository implements Repository {
       }
       keys.add(refKey(entry.ref));
     }
-    return value;
+    return loaded;
   }
 
-  private async record(directory: string, entry: Entry): Promise<StoredRecord> {
+  private async record(directory: string, entry: Entry, packed?: ReadonlyMap<string, string>): Promise<StoredRecord> {
     let bytes: string;
-    try { bytes = await readFile(join(directory, entry.file), 'utf8'); }
+    try {
+      const loaded = packed ? packed.get(entry.file) : await readFile(join(directory, entry.file), 'utf8');
+      if (loaded === undefined) return corrupt('A packed operation is missing a record.');
+      bytes = loaded;
+    }
     catch { return corrupt('A published operation is missing a readable record.'); }
     if (digest(bytes) !== entry.sha256) corrupt('A published record failed its content hash check.');
     let record: StoredRecord;
@@ -177,11 +194,12 @@ export class FilesystemRepository implements Repository {
 
   async findOperation(operationId: string): Promise<OperationCommit | undefined> {
     const directory = join(this.operations, digest(operationId));
-    let manifest: Manifest;
-    try { manifest = await this.manifest(directory); } catch (error) { if (isMissing(error)) return undefined; throw error; }
+    let loaded: Awaited<ReturnType<FilesystemRepository['operation']>>;
+    try { loaded = await this.operation(directory); } catch (error) { if (isMissing(error)) return undefined; throw error; }
+    const { manifest, packed } = loaded;
     if (manifest.operationId !== operationId) corrupt('An operation directory does not match its identity.');
     const records: StoredRecord[] = [];
-    for (const entry of manifest.records) records.push(await this.record(directory, entry));
+    for (const entry of manifest.records) records.push(await this.record(directory, entry, packed));
     const batches = records.filter(record => record.kind === 'batch');
     const evidence = records.filter(record => record.kind === 'evidence');
     if (batches.length !== 1 || evidence.length !== 1) corrupt('A committed operation must have one batch and one evidence record.');
@@ -196,7 +214,7 @@ export class FilesystemRepository implements Repository {
     // A concurrent reader can arrive after rename but before the publishing
     // writer's fsync. Do not acknowledge that directory entry without syncing it.
     await syncDirectory(this.operations);
-    return { fingerprint: manifest.fingerprint, receipt: manifest.receipt };
+    return { fingerprint: manifest.fingerprint, receipt: JSON.parse(json(manifest.receipt)) as CommitReceipt };
   }
 
   async read(ref: RecordRef): Promise<StoredRecord | undefined> {
@@ -207,11 +225,11 @@ export class FilesystemRepository implements Repository {
     let foundHash: string | undefined;
     for (const name of names.filter(name => /^[a-f0-9]{64}$/.test(name)).sort()) {
       const directory = join(this.operations, name);
-      const manifest = await this.manifest(directory);
+      const { manifest, packed } = await this.operation(directory);
       const entry = manifest.records.find(item => sameRef(item.ref, ref));
       if (!entry) continue;
       if (foundHash !== undefined && foundHash !== entry.sha256) corrupt('A reference names conflicting records in different operations.');
-      found = await this.record(directory, entry);
+      found = await this.record(directory, entry, packed);
       foundHash = entry.sha256;
     }
     return found;
@@ -230,11 +248,11 @@ export class FilesystemRepository implements Repository {
     const found = new Map<string, { hash: string; record: StoredRecord }>();
     for (const name of names.filter(name => /^[a-f0-9]{64}$/.test(name)).sort()) {
       const directory = join(this.operations, name);
-      const manifest = await this.manifest(directory);
+      const { manifest, packed } = await this.operation(directory);
       const entries = manifest.records.filter(entry => wanted.has(refKey(entry.ref)));
       // Bound file concurrency without skipping any duplicate-copy hash check.
       for (let i = 0; i < entries.length; i += MAX_RECORD_READ_CONCURRENCY) {
-        const results = await Promise.all(entries.slice(i, i + MAX_RECORD_READ_CONCURRENCY).map(async entry => ({ entry, record: await this.record(directory, entry) })));
+        const results = await Promise.all(entries.slice(i, i + MAX_RECORD_READ_CONCURRENCY).map(async entry => ({ entry, record: await this.record(directory, entry, packed) })));
         for (const { entry, record } of results) {
           const key = refKey(entry.ref), previous = found.get(key);
           if (previous && previous.hash !== entry.sha256) corrupt('A reference names conflicting records in different operations.');
@@ -242,7 +260,10 @@ export class FilesystemRepository implements Repository {
         }
       }
     }
-    return refs.map(ref => found.get(refKey(ref))?.record);
+    return refs.map(ref => {
+      const value = found.get(refKey(ref))?.record;
+      return value === undefined ? undefined : JSON.parse(json(value)) as StoredRecord;
+    });
   }
 
   private existing(operation: OperationCommit, fingerprint: string): CommitReceipt {
@@ -285,14 +306,19 @@ export class FilesystemRepository implements Repository {
         observationRefs: [...write.batch.observationRefs],
         committedAt: new Date().toISOString(),
       };
-      const entries: Entry[] = [];
-      for (const item of encoded) {
-        const file = recordFile(item.ref);
-        await writeSynced(join(staging, file), item.bytes);
-        entries.push({ ref: item.ref, file, sha256: digest(item.bytes) });
-      }
+      const entries: Entry[] = encoded.map(item => ({ ref: item.ref, file: recordFile(item.ref), sha256: digest(item.bytes) }));
       const manifest: Manifest = { version: 1, operationId: write.operationId, fingerprint: write.fingerprint, receipt, records: entries };
-      await writeSynced(join(staging, 'manifest.json'), json(manifest));
+      if (this.packing === 'gzip') {
+        const payload = encoded.map((item, index) => ({ file: entries[index]!.file, bytes: item.bytes }));
+        const bytes = await encodePackedOperation(manifest, payload, this.maxPackedBytes);
+        await writeSynced(join(staging, PACKED_OPERATION_FILE), bytes);
+        // Reopen the synced inode and verify every original content hash before publication.
+        const verified = await this.packedReads.read(staging);
+        if (json(verified.manifest) !== json(manifest)) corrupt('Packed publication does not match its intended manifest.');
+      } else {
+        for (const [index, item] of encoded.entries()) await writeSynced(join(staging, entries[index]!.file), item.bytes);
+        await writeSynced(join(staging, 'manifest.json'), json(manifest));
+      }
       await syncDirectory(staging);
       try { await rename(staging, final); }
       catch (error) {
@@ -313,7 +339,7 @@ export class FilesystemRepository implements Repository {
   }
 }
 
-export function createFilesystemRepository(options: FilesystemOptions): FilesystemRepository {
+export function createFilesystemRepository(options: FilesystemRepositoryOptions): FilesystemRepository {
   return new FilesystemRepository(options);
 }
 
@@ -375,3 +401,6 @@ export class FilesystemTraceStore implements TraceStore {
 export function createFilesystemTraceStore(options: FilesystemTraceOptions): FilesystemTraceStore {
   return new FilesystemTraceStore(options);
 }
+
+export { createGuardedFilesystemTraceStore, GuardedFilesystemTraceStore, TraceStorageError, TRACE_RETENTION_MS } from './guardedTrace/index.js';
+export type { GuardedTraceOptions, TraceStorageHealth, TraceStorageReceipt, TraceStorageGapReceipt, TraceStorageCode } from './guardedTrace/index.js';

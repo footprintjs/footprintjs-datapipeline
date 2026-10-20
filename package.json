@@ -41,7 +41,11 @@
     "LICENSE",
     "docs/RUN_WINDOW_EVIDENCE.md",
     "docs/RUN_WINDOW_TIMING.md",
-    "docs/FULL_TRACE_STORAGE_PLAN.md"
+    "docs/FULL_TRACE_STORAGE_PLAN.md",
+    "docs/TRACE_STORAGE_BUDGET.md",
+    "docs/POWERSCALE_STORAGE_MEASUREMENT.md",
+    "docs/measurements",
+    "docs/PACKED_REPOSITORY.md"
   ],
   "sideEffects": false,
   "scripts": {

@@ -1,6 +1,6 @@
 {
   "name": "footprintjs-datapipeline",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Collection and derivation flows with traceable evidence, built on Footprint",
   "type": "module",
   "license": "MIT",

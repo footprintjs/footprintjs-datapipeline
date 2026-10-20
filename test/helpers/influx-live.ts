@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createInfluxDbSink, type InfluxLimits } from '../../src/influxdb/index.js';
+import { createInfluxDbReader, createInfluxDbSink, type InfluxLimits, type InfluxQueryTemplate } from '../../src/influxdb/index.js';
 
 export const liveEnabled = !!process.env.INFLUX_TEST_URL;
 if (process.env.INFLUX_TEST_REQUIRED === '1' && !liveEnabled) throw new Error('Disposable InfluxDB is required.');
@@ -32,7 +32,15 @@ export async function createLiveFixture() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ orgID, name: bucket, retentionRules: [] }),
   })).json() as { id: string };
+  const authorizations: string[] = [];
   return {
+    bucket,
+    async reader(templates: readonly InfluxQueryTemplate[]) {
+      const authorization = await (await request('/api/v2/authorizations', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgID, permissions: [{ action: 'read', resource: { type: 'buckets', id: created.id, orgID } }] }) })).json() as { id: string; token: string };
+      authorizations.push(authorization.id);
+      return createInfluxDbReader({ url, org, bucket, getToken: () => authorization.token, templates });
+    },
     sink: (limits: InfluxLimits = {}, fetch?: typeof globalThis.fetch) => createInfluxDbSink({
       url, org, bucket, getToken: () => token, limits, ...(fetch ? { fetch } : {}),
     }),
@@ -54,6 +62,8 @@ export async function createLiveFixture() {
       return JSON.parse(execFileSync('python3', ['-I', helper], { input: csv, encoding: 'utf8',
         env: {}, timeout: 5000, maxBuffer: 1024 * 1024 })) as LiveRow[];
     },
-    async close() { await (await request(`/api/v2/buckets/${created.id}`, { method: 'DELETE' })).body?.cancel(); },
+    async close() {
+      for (const id of authorizations) await (await request(`/api/v2/authorizations/${id}`, { method: 'DELETE' })).body?.cancel();
+      await (await request(`/api/v2/buckets/${created.id}`, { method: 'DELETE' })).body?.cancel(); },
   };
 }

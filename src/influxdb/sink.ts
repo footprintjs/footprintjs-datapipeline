@@ -1,3 +1,4 @@
+import { discardInfluxBody as discardBody, influxToken as tokenValue } from './connection.js';
 import { InfluxValidationError, type InfluxBatchReceipt, type InfluxDbSink,
   type InfluxDbSinkOptions, type InfluxPoint, type InfluxWriteCode } from './contracts.js';
 import { createWriteBudget, type StopCode } from './budget.js';
@@ -6,17 +7,6 @@ import { partitionLines } from './partition.js';
 import { writeReceipt } from './receipts.js';
 import { readSinkSettings } from './settings.js';
 import { inspectPointCount, writeSignal } from './writeOptions.js';
-
-function discardBody(response: Response) {
-  try { void response.body?.cancel().catch(() => {}); } catch { /* No response text is read. */ }
-}
-
-function tokenValue(value: unknown): string {
-  if (typeof value !== 'string' || value.length === 0 || value.length > 8192 || /[\u0000-\u0020\u007f]/u.test(value)) {
-    throw new Error('Credentials unavailable.');
-  }
-  return value;
-}
 
 type WritePhase = 'options' | 'validation' | 'credentials' | 'transport';
 

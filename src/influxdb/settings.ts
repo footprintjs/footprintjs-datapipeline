@@ -1,26 +1,6 @@
 import { InfluxValidationError, type InfluxDbSinkOptions } from './contracts.js';
+import { connectionName, influxEndpoint } from './connection.js';
 import { normalizeInfluxLimits } from './limits.js';
-
-function checkedName(value: unknown): string {
-  if (typeof value !== 'string' || value.length === 0 || value.length > 1024 || /[\u0000-\u001f\u007f]/u.test(value)) {
-    throw new InfluxValidationError('invalid-options');
-  }
-  return value;
-}
-
-function writeUrl(raw: string, org: string, bucket: string): string {
-  try {
-    const url = new URL(raw);
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-      throw new Error();
-    }
-    url.pathname = `${url.pathname.replace(/\/+$/u, '')}/api/v2/write`;
-    url.search = new URLSearchParams({ org, bucket, precision: 'ns' }).toString();
-    return url.href;
-  } catch {
-    throw new InfluxValidationError('invalid-options');
-  }
-}
 
 export function readSinkSettings(options: InfluxDbSinkOptions) {
   if (!options || typeof options !== 'object' || typeof options.getToken !== 'function') {
@@ -32,7 +12,7 @@ export function readSinkSettings(options: InfluxDbSinkOptions) {
     throw new InfluxValidationError('invalid-options');
   }
   return Object.freeze({
-    url: writeUrl(options.url, checkedName(options.org), checkedName(options.bucket)),
+    url: influxEndpoint(options.url, 'write', { org: connectionName(options.org), bucket: connectionName(options.bucket), precision: 'ns' }),
     getToken: options.getToken, fetch, timeoutMs, limits: normalizeInfluxLimits(options.limits),
   });
 }

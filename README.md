@@ -417,6 +417,20 @@ underlying rows. Application adapters own measurement meanings, calculation matc
 tests, historical relationships, claim gates and access checks. See the
 [reader contract](docs/INFLUXDB_READER.md) for bounds, templates and limitations.
 
+## Opt-in run/window evidence
+
+`createRunWindowEvidenceTransform()` returns nothing unless `enabled: true`.
+When explicitly registered, it derives bounded collection-clock windows from
+saved run receipts and per-series compact observations, reusing native Footprint
+steps, shared requirement records and numeric statistics. Missing polls remain
+individual gaps, not zeros. See [the contract and adoption boundary](docs/RUN_WINDOW_EVIDENCE.md).
+This adds no timer, retention deletion, device adapter or automatic app wiring.
+
+Optional `Repository.readMany(refs)` accelerates derivation in chunks of at most
+`MAX_REPOSITORY_READ_BATCH` (256). It must return one result per reference, in
+order, including `undefined` for missing entries, with the same validation as
+`read`. It provides no snapshot guarantee. Existing scalar-only ports work
+unchanged. See [run/window timing measurements](docs/RUN_WINDOW_TIMING.md).
 ## Optional trace storage safeguards
 
 The [guarded gzip trace store](docs/TRACE_STORAGE_BUDGET.md) adds explicit disk

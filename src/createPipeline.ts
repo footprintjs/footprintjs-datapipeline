@@ -1,11 +1,12 @@
 import { FlowChartExecutor } from 'footprintjs';
 import { inOutRecorder } from 'footprintjs/trace';
 import type {
-  BatchInput, CandidateBatch, CollectRequest, CommitReceipt, Coverage, DeriveRequest,
+  Batch, BatchInput, CandidateBatch, CollectRequest, CommitReceipt, Coverage, DeriveRequest,
   EvidenceOrigin, JsonValue, Observation, PipelineError, PipelineResult,
   RecordRef, Source, StoredRecord, VersionedRef,
 } from './contracts.js';
 import type { CommitWrite, OperationContext, Repository, SourceAdapter, TraceStore, Transform } from './ports.js';
+import { readRepositoryRecords } from './readRepository.js';
 import { collectFlow } from './flows/collect.js';
 import { deriveFlow } from './flows/derive.js';
 import { assertRef, assertTimestamp, canonical, cloneJson, digest, ensure, PipelineFault, validateCandidate, type PayloadLimits } from './validation.js';
@@ -206,12 +207,18 @@ export function createPipeline(options: PipelineOptions): Pipeline {
               : deriveFlow({
                 load: async input => {
                   const loaded: BatchInput[] = [];
-                  for (const batchRef of input.inputBatchRefs) {
-                    const batch = await abortable(repository.read(batchRef), controller.signal);
-                    ensure(batch?.kind === 'batch' && canonical(batch.ref) === canonical(batchRef), 'Input batch is missing or mismatched');
+                  const batchRecords = await abortable(readRepositoryRecords(repository, input.inputBatchRefs, controller.signal), controller.signal);
+                  const batches: Batch[] = batchRecords.map((batch, i) => {
+                    ensure(batch?.kind === 'batch' && canonical(batch.ref) === canonical(input.inputBatchRefs[i]), 'Input batch is missing or mismatched');
+                    return batch;
+                  });
+                  const records = await abortable(readRepositoryRecords(repository, batches.flatMap(batch => batch.observationRefs), controller.signal), controller.signal);
+                  let position = 0;
+                  for (const batch of batches) {
+                    const batchRef = batch.ref;
                     const observations: Observation[] = [];
                     for (const observationRef of batch.observationRefs) {
-                      const item = await abortable(repository.read(observationRef), controller.signal);
+                      const item = records[position++];
                       ensure(item?.kind === 'observation' && canonical(item.ref) === canonical(observationRef) && canonical(item.batchRef) === canonical(batchRef), 'Input observation is missing or mismatched');
                       const time = item.time, start = Date.parse(input.window.start), end = Date.parse(input.window.end);
                       let include: boolean;

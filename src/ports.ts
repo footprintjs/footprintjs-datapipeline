@@ -58,6 +58,8 @@ export interface OperationCommit {
   readonly receipt: CommitReceipt;
 }
 
+/** Maximum references per optional bulk request; implementations must not truncate. */
+export const MAX_REPOSITORY_READ_BATCH = 256;
 export interface Repository {
   /** Reconcile a retry or an acknowledgement whose commit outcome was unknown. */
   findOperation(operationId: string): Promise<OperationCommit | undefined>;
@@ -70,6 +72,10 @@ export interface Repository {
   commit(write: CommitWrite): Promise<CommitReceipt>;
   /** Only published records may be read; missing records return undefined. */
   read(ref: RecordRef): Promise<StoredRecord | undefined>;
+  /** Optional fresh lookup, same order/length as refs, including undefined for
+   * missing records. Accept up to MAX_REPOSITORY_READ_BATCH references. No snapshot
+   * or immutability promise; preserve ordinary read validation on every request. */
+  readMany?(refs: readonly RecordRef[]): Promise<readonly (StoredRecord | undefined)[]>;
 }
 
 /** Called after the data outcome is known; trace failure cannot undo that outcome. */

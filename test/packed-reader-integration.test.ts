@@ -38,3 +38,16 @@ it('real repository bulk reads share one overlapping inflate, recheck later, and
     await rm(path, { recursive: true, force: true });
   }
 });
+
+it('bulk lookup preserves mixed-format order, missing rows and independent duplicate results', async () => {
+  const path = await mkdtemp(join(tmpdir(), 'packed-bulk-'));
+  try {
+    const plain = candidate('bulk-plain'), packed = candidate('bulk-packed');
+    await createFilesystemRepository({ directory: path }).commit(plain);
+    await createFilesystemRepository({ directory: path, packing: 'gzip' }).commit(packed);
+    const reader = createFilesystemRepository({ directory: path });
+    const values = await reader.readMany([packed.observations[0]!.ref, plain.batch.ref, { kind: 'observation', id: 'missing' }, packed.observations[0]!.ref]);
+    expect(values).toEqual([packed.observations[0], plain.batch, undefined, packed.observations[0]]);
+    expect(values[0]).not.toBe(values[3]);
+  } finally { await rm(path, { recursive: true, force: true }); }
+});

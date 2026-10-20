@@ -1,3 +1,5 @@
+import type { Observation } from '../src/contracts.js';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -5,11 +7,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { candidate } from './helpers/filesystem-candidate.js';
 import { createFilesystemRepository, createFilesystemTraceStore } from '../src/storage/filesystem.js';
 
-const fault = vi.hoisted(() => ({ failRename: false }));
+const fault = vi.hoisted(() => ({ failRename: false, manifestReads: 0 }));
 vi.mock('node:fs/promises', async importOriginal => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
+    readFile: async (...args: Parameters<typeof actual.readFile>) => {
+      if (String(args[0]).endsWith('/manifest.json')) fault.manifestReads++;
+      return actual.readFile(...args);
+    },
     rename: async (...args: Parameters<typeof actual.rename>) => {
       if (fault.failRename) throw Object.assign(new Error('Injected publication failure'), { code: 'EIO' });
       return actual.rename(...args);
@@ -141,4 +147,54 @@ describe('separate filesystem trace store', () => {
     await writeFile(join(path, 'traces', `${ref.id}.json`), '{}');
     await expect(store.read(ref)).rejects.toMatchObject({ code: 'storage_corrupt' });
   });
+});
+
+describe('bounded filesystem bulk lookup', () => {
+  it('preserves order, duplicates and missing records while scanning each manifest once', async () => {
+    const path = await directory(), repository = createFilesystemRepository({ directory: path });
+    const a = candidate('bulk-a'), b = candidate('bulk-b');
+    await repository.commit(a); await repository.commit(b);
+    fault.manifestReads = 0;
+    const values = await repository.readMany([b.observations[0]!.ref, a.batch.ref, {kind:'observation',id:'absent'}, b.observations[0]!.ref]);
+    expect(values).toEqual([b.observations[0], a.batch, undefined, b.observations[0]]);
+    expect(fault.manifestReads).toBe(2);
+  });
+  it('checks bytes again on every bulk request rather than caching an earlier approval', async () => {
+    const path = await directory(), repository = createFilesystemRepository({ directory: path }), write = candidate('bulk-tamper');
+    await repository.commit(write); await repository.readMany([write.observations[0]!.ref]);
+    const operation = (await readdir(join(path,'operations'))).find(name=>!name.startsWith('.'))!;
+    const folder = join(path,'operations',operation);
+    const manifest = JSON.parse(await readFile(join(folder,'manifest.json'),'utf8')) as {records:{file:string;ref:{kind:string}}[]};
+    await writeFile(join(folder,manifest.records.find(row=>row.ref.kind==='observation')!.file),'{}');
+    await expect(repository.readMany([write.observations[0]!.ref])).rejects.toMatchObject({code:'storage_corrupt'});
+  });
+  it('refuses oversized lists instead of returning a prefix', async () => {
+    const repository = createFilesystemRepository({directory:await directory()});
+    await expect(repository.readMany(Array.from({length:257},(_,i)=>({kind:'observation' as const,id:String(i)})))).rejects.toMatchObject({code:'invalid_reference'});
+  });
+});
+
+it('bulk lookup refuses conflicting copies just like scalar lookup', async () => {
+  const path = await directory();
+  const repository = createFilesystemRepository({ directory: path });
+  const a = candidate('duplicate-a'), b = candidate('duplicate-b', 'request-b', 99);
+  await repository.commit(a);
+  await repository.commit(b);
+  // Simulate corrupted published storage; commit correctly refuses this conflict.
+  const hash = (value: string) => createHash('sha256').update(value).digest('hex');
+  const folder = join(path, 'operations', hash(b.operationId));
+  const manifestPath = join(folder, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+    records: { ref: Observation['ref']; file: string; sha256: string }[];
+  };
+  const entry = manifest.records.find(row => row.ref.kind === 'observation')!;
+  const ref = a.observations[0]!.ref;
+  const bytes = JSON.stringify({ ...b.observations[0]!, ref });
+  entry.ref = ref;
+  entry.file = `observation-${hash(`observation:${ref.id}`)}.json`;
+  entry.sha256 = hash(bytes);
+  await writeFile(join(folder, entry.file), bytes);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await expect(repository.read(ref)).rejects.toMatchObject({ code: 'storage_corrupt' });
+  await expect(repository.readMany([ref])).rejects.toMatchObject({ code: 'storage_corrupt' });
 });

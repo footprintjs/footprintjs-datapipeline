@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Pin the published Footprint 10.2.0 and Foottrace 1.6.0. Native window execution now uses Footprint's built-in control snapshot and terminal-failure accessor; both temporary recorder implementations are removed.
+- Pin the published Footprint 10.2.1 and Foottrace 1.6.0. Native window execution now uses Footprint's built-in control snapshot and terminal-failure accessor; both temporary recorder implementations are removed.
 - Window control snapshots use the native `control-dependencies` bundle name. Readers upgrading to 0.6.0 must also recognize historical `window-control-dependencies` bundles without rewriting saved records or combining ambiguous duplicates. Public collection, derivation, scheduling and sink contracts are unchanged.
 
 ### Fixed

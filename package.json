@@ -40,7 +40,8 @@
     "README.md",
     "LICENSE",
     "docs/RUN_WINDOW_EVIDENCE.md",
-    "docs/RUN_WINDOW_TIMING.md"
+    "docs/RUN_WINDOW_TIMING.md",
+    "docs/FULL_TRACE_STORAGE_PLAN.md"
   ],
   "sideEffects": false,
   "scripts": {

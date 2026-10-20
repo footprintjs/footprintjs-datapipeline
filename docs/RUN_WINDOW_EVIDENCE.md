@@ -146,3 +146,12 @@ server, model call or Python process runs. The fixture omits raw archives delibe
 See [the timing review](RUN_WINDOW_TIMING.md) for separate fixture-ingestion,
 repository-read and native-flow measurements at 64 slots / 8,192 observations,
 and the bounded bulk-read optimization.
+
+## Full-trace retention decision
+
+The approved host policy keeps every recorded run trace and every window trace
+with lossless gzip, without sampling or automatic deletion. The library default
+remains unchanged. See [the storage plan](FULL_TRACE_STORAGE_PLAN.md) for
+configuration, reader rollout, capacity assumptions and raw-archive boundaries.
+The offline example now saves and reopens all 59 run traces, plus its two window
+execution traces; summaries do not replace them.

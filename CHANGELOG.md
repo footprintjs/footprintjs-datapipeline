@@ -10,6 +10,8 @@
 
 ### Changed
 
+- Document full recorded run/window trace retention with opt-in lossless gzip; the offline run/window example retains every produced trace and reopens run and native window evidence. No sampling, deletion, production configuration or generic compression default changes.
+
 - Derivation can use an optional bounded repository bulk-read capability. Filesystem lookup validates each requested record while scanning manifests once per chunk, avoiding repeated manifest scans for large saved windows. Scalar-only ports and existing saved records remain supported.
 
 - Share the existing writer connection validation and credential/body handling with the reader; write behavior and public write contracts are unchanged.

@@ -4,6 +4,8 @@
 
 ### Added
 
+- Optional guarded gzip trace store with allocated-byte quotas, free-space/receipt headroom, durable pressure gaps and independent health events. Thirty-day trace expiry uses bounded explicit maintenance and preserves small expiry receipts; no collector, timer, archive policy or default activation changes.
+
 - Optional InfluxDB reader and source adapter with registered versioned templates, literal bindings, bounded responses and fixed read diagnostics. Saved query rows use ordinary observations and one database-boundary receipt, with explicit mutable-source and unknown upstream coverage semantics. Database calculation delegation remains application-owned and requires matching tests.
 
 ### Changed

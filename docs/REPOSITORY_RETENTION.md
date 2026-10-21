@@ -60,6 +60,11 @@ a fixed health event, and can be retried. Tombstones and reference membership
 remain after data removal, so the original references say expired after restart.
 They are not automatically expired: metadata itself still grows.
 
+The [retained-history design and offline measurements](design/2026-10-retained-history.md)
+compare smaller exact encodings and explain the separate contract needed before
+forgetting any identities. It is a proposal, not implemented compaction or a
+bounded-history guarantee.
+
 SQLite full-synchronous transactions serialize cooperating processes during
 native publication and reads; another process receives `REPOSITORY_BUSY` rather
 than waiting indefinitely. Per instance at most 32 transactions are queued.

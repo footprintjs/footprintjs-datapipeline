@@ -1,0 +1,1564 @@
+{
+  "provenance": "LOCAL SEED; synthetic source and acknowledgement; actual inactive Neo writer; isolated local processes",
+  "trials": [
+    {
+      "trial": "candidate-256-1",
+      "reportSha256": "688fdd2e4fb8d4dcd4979b21a03e12967923a2775c207f37628289b0f3a2f366",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 256,
+      "mode": "candidate",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 1025465,
+          "system": 253530
+        },
+        "maxRssBytes": 1175240704,
+        "memoryAtEnd": {
+          "rss": 349126656,
+          "heapTotal": 240107520,
+          "heapUsed": 119865064,
+          "external": 16258930,
+          "arrayBuffers": 10725993
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.431666000000007
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 2.5985850000007815
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 68.97029099999946
+        },
+        "native.gzip": {
+          "count": 8,
+          "inclusiveMs": 42.14129200000002
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.6862919999998667
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 4.767291999999742
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 14.662166999999982
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 917.1031259999999
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 11.968248999999815
+        },
+        "repository.read": {
+          "count": 169,
+          "inclusiveMs": 794.9475070000021
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.02487500000000864
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 11.606875000000002
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 170.0945
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 480.733542
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 37.275084000000106
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 12.155459000000064
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 4.1419160000000375
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 8.86158300000011
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 8.697583000000122
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 947.794958
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 960.3673749999999
+        }
+      },
+      "recordPreparationMs": 117.41970800000004,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "candidate-256-2",
+      "reportSha256": "bf6ac128e4da089e217cdc22583bb2e17d829efbfb9a2ea1799de664d66f92ae",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 256,
+      "mode": "candidate",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 1039941,
+          "system": 259830
+        },
+        "maxRssBytes": 1309966336,
+        "memoryAtEnd": {
+          "rss": 777863168,
+          "heapTotal": 670973952,
+          "heapUsed": 550554128,
+          "external": 10396915,
+          "arrayBuffers": 4863399
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.518916000000047
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 3.5416670000005297
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 79.87175200000004
+        },
+        "native.gzip": {
+          "count": 8,
+          "inclusiveMs": 25.900001999999972
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 1.1021229999995512
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 4.884337000000272
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 20.061583999999982
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 954.258292
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 13.141207999999807
+        },
+        "repository.read": {
+          "count": 169,
+          "inclusiveMs": 823.0047500000032
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.03787499999998545
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 10.968083000000007
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 178.82320800000002
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 494.15100000000007
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 40.03866599999992
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 10.547166999999945
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 4.192082999999911
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 10.517125000000078
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 9.230125000000044
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 986.96
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 1000.788417
+        }
+      },
+      "recordPreparationMs": 122.86966699999994,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "candidate-256-3",
+      "reportSha256": "a8cc6f08aed8448cd4077257963e1e5357939f2e40351b04709e02e6b16ff5b4",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 256,
+      "mode": "candidate",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 1064682,
+          "system": 258369
+        },
+        "maxRssBytes": 1331347456,
+        "memoryAtEnd": {
+          "rss": 853540864,
+          "heapTotal": 745848832,
+          "heapUsed": 635622704,
+          "external": 10397218,
+          "arrayBuffers": 4863702
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.5835000000001287
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 4.026121999999873
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 83.85937699999982
+        },
+        "native.gzip": {
+          "count": 8,
+          "inclusiveMs": 26.96554100000003
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.9614160000000993
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 5.635337000000135
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 15.692540999999977
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 971.4470420000001
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 12.876083000000023
+        },
+        "repository.read": {
+          "count": 169,
+          "inclusiveMs": 825.0677509999994
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.02895899999998619
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 15.445249999999987
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 197.04629200000002
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 486.99075000000016
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 38.07833399999981
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 10.832292000000052
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 5.27558299999987
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 10.084790999999996
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 13.20204200000012
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 1008.650875
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 1022.4804159999999
+        }
+      },
+      "recordPreparationMs": 124.20091699999998,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "candidate-50-1",
+      "reportSha256": "4bb25e17fbef3a751ca3d43994eb7b2baba1af3b3dfc4dee9ab1d9f5269a662b",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 50,
+      "mode": "candidate",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 223616,
+          "system": 30660
+        },
+        "maxRssBytes": 289062912,
+        "memoryAtEnd": {
+          "rss": 253755392,
+          "heapTotal": 205881344,
+          "heapUsed": 78664280,
+          "external": 7407754,
+          "arrayBuffers": 1869514
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.4042929999999956
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 2.602919000000128
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 64.93983300000002
+        },
+        "native.gzip": {
+          "count": 8,
+          "inclusiveMs": 7.409041000000059
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.670125000000013
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 2.6044999999999447
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 15.733958999999999
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 202.73237400000002
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 1.6399190000001056
+        },
+        "repository.read": {
+          "count": 65,
+          "inclusiveMs": 115.37420999999992
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.029542000000020607
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 8.896333999999996
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 28.956499999999977
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 64.42600000000004
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 19.164209000000028
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 10.067209000000048
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 1.452791999999988
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 8.925875000000019
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 8.489833000000033
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 222.049
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 234.624916
+        }
+      },
+      "recordPreparationMs": 23.257457999999986,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "candidate-50-2",
+      "reportSha256": "5e43d049c02d6e2596a758a2d52d9c24ce8a34a3991289aa5a832661a52466de",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 50,
+      "mode": "candidate",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 230358,
+          "system": 35276
+        },
+        "maxRssBytes": 289161216,
+        "memoryAtEnd": {
+          "rss": 254509056,
+          "heapTotal": 205094912,
+          "heapUsed": 78472840,
+          "external": 7407724,
+          "arrayBuffers": 1869484
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.5838329999999701
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 3.3696259999999256
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 73.95966499999994
+        },
+        "native.gzip": {
+          "count": 8,
+          "inclusiveMs": 7.58333200000007
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.920291000000077
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 3.1544589999998607
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 16.821583000000004
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 218.304293
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 1.6414599999999666
+        },
+        "repository.read": {
+          "count": 65,
+          "inclusiveMs": 114.32979200000025
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.031041999999985137
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 13.18837499999998
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 33.134375000000006
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 62.23366599999997
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 18.081209
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 10.027332999999999
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 1.4942499999999654
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 12.963583000000028
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 12.316458000000011
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 239.766125
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 252.72283299999998
+        }
+      },
+      "recordPreparationMs": 23.723375000000004,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "candidate-50-3",
+      "reportSha256": "28fcb94bc5334481a3447c839b0ca5b4b64bd5a692299982bcf19a05460cf390",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 50,
+      "mode": "candidate",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 217055,
+          "system": 31885
+        },
+        "maxRssBytes": 289193984,
+        "memoryAtEnd": {
+          "rss": 254394368,
+          "heapTotal": 205619200,
+          "heapUsed": 78519776,
+          "external": 7407692,
+          "arrayBuffers": 1869452
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.35424999999995066
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 2.682042000000024
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 67.61521099999993
+        },
+        "native.gzip": {
+          "count": 8,
+          "inclusiveMs": 7.440247999999997
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.6991260000000636
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 2.6615810000000693
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 15.559499999999986
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 201.61454200000006
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 1.6188740000000337
+        },
+        "repository.read": {
+          "count": 65,
+          "inclusiveMs": 117.41958700000004
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.027250000000009322
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 9.328791999999993
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 29.00354199999998
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 60.69541699999996
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 18.31020799999999
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 10.03329199999996
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 1.4891250000000014
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 8.105916999999977
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 13.199874999999963
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 220.779042
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 233.331958
+        }
+      },
+      "recordPreparationMs": 22.847500000000025,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "published-256-1",
+      "reportSha256": "42434c07850056f5081654e856241bc23d67886797d72615875a453fbfed8b9a",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 256,
+      "mode": "published",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 1806863,
+          "system": 667452
+        },
+        "maxRssBytes": 1436286976,
+        "memoryAtEnd": {
+          "rss": 401457152,
+          "heapTotal": 296845312,
+          "heapUsed": 179060160,
+          "external": 10305481,
+          "arrayBuffers": 4772544
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.46262399999974946
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 2.5358289999998362
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 80.62829499999958
+        },
+        "native.gzip": {
+          "count": 10,
+          "inclusiveMs": 47.65800099999984
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.7222500000000593
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 4.6337109999997494
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 20.963583
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 1775.3360420000001
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 12.261749000000151
+        },
+        "repository.read": {
+          "count": 169,
+          "inclusiveMs": 765.8420409999984
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.026250000000004547
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 10.523167
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 176.40920799999998
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 1319.272874
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 35.619416999999885
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 11.384457999999995
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 4.215041999999812
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 8.964791000000105
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 8.653792000000067
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 1806.09125
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 1819.944125
+        }
+      },
+      "recordPreparationMs": 130.83562500000005,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "published-256-2",
+      "reportSha256": "dad4666322baedf3bd5d220b9e85a2b02606bb480688d715870298988b9557a9",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 256,
+      "mode": "published",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 1785703,
+          "system": 665362
+        },
+        "maxRssBytes": 1490665472,
+        "memoryAtEnd": {
+          "rss": 546095104,
+          "heapTotal": 442220544,
+          "heapUsed": 334252304,
+          "external": 10305573,
+          "arrayBuffers": 4772636
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.47583399999996345
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 2.6570459999994966
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 70.4258730000004
+        },
+        "native.gzip": {
+          "count": 10,
+          "inclusiveMs": 47.563501
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.9339159999998969
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 4.989874999999955
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 15.745459000000011
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 1750.385292
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 12.291583000000315
+        },
+        "repository.read": {
+          "count": 169,
+          "inclusiveMs": 821.2846230000002
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.025832999999977346
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 12.147874999999999
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 172.914791
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 1312.4654589999998
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 35.836083000000144
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 9.66904199999999
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 4.348541999999952
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 8.466709000000037
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 9.383624999999938
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 1783.408041
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 1796.8400000000001
+        }
+      },
+      "recordPreparationMs": 118.33725000000001,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "published-256-3",
+      "reportSha256": "b367b4f83f7568b825a39b97708606ea1b24de828a70d70485fd60947630fdce",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 256,
+      "mode": "published",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 1816389,
+          "system": 667677
+        },
+        "maxRssBytes": 1422245888,
+        "memoryAtEnd": {
+          "rss": 1211514880,
+          "heapTotal": 1107886080,
+          "heapUsed": 999228992,
+          "external": 10305651,
+          "arrayBuffers": 4772714
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.47283399999994913
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 2.806459000000274
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 75.76237300000003
+        },
+        "native.gzip": {
+          "count": 10,
+          "inclusiveMs": 47.26208100000008
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.7344580000001599
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 4.931753000000043
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 16.711874999999992
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 1783.0646669999996
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 12.541583999999972
+        },
+        "repository.read": {
+          "count": 169,
+          "inclusiveMs": 823.155385000001
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.025624999999990905
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 13.924333000000019
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 186.066625
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 1327.5407080000002
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 37.74700000000007
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 9.065290999999888
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 4.258749999999964
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 8.949125000000095
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 9.240375000000085
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 1816.2435
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 1830.2076670000001
+        }
+      },
+      "recordPreparationMs": 120.37616700000001,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "published-50-1",
+      "reportSha256": "a7df6eb6b9deb1adfec0388dc36a67df4e05cd19169d14afc3747ea094731416",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 50,
+      "mode": "published",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 300850,
+          "system": 68350
+        },
+        "maxRssBytes": 345489408,
+        "memoryAtEnd": {
+          "rss": 345505792,
+          "heapTotal": 274350080,
+          "heapUsed": 186865184,
+          "external": 8808181,
+          "arrayBuffers": 3269949
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.4508749999999395
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 3.458998000000122
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 81.02554300000003
+        },
+        "native.gzip": {
+          "count": 10,
+          "inclusiveMs": 12.234500000000082
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.7391680000000065
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 2.93408299999993
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 32.81979100000001
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 286.462125
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 1.7152489999999148
+        },
+        "repository.read": {
+          "count": 65,
+          "inclusiveMs": 108.16299899999967
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.024458999999978914
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 9.217457999999965
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 31.017291999999998
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 126.55358299999995
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 20.584791999999993
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 8.985000000000014
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 1.5901249999999436
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 9.351583000000005
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 9.148040999999921
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 306.10241599999995
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 319.558792
+        }
+      },
+      "recordPreparationMs": 24.707291999999995,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "published-50-2",
+      "reportSha256": "e5bd19bb5aed81d53350dde6c1ccea764836bbbfedc26f0471a3d9150bb72734",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 50,
+      "mode": "published",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 270721,
+          "system": 41591
+        },
+        "maxRssBytes": 325632000,
+        "memoryAtEnd": {
+          "rss": 315850752,
+          "heapTotal": 273678336,
+          "heapUsed": 164517216,
+          "external": 7759519,
+          "arrayBuffers": 2221279
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.3798759999999959
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 2.8458369999998467
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 77.72612599999994
+        },
+        "native.gzip": {
+          "count": 10,
+          "inclusiveMs": 11.997708000000017
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.6601670000000013
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 3.0063769999998726
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 16.104625
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 268.92674999999997
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 1.6530400000000327
+        },
+        "repository.read": {
+          "count": 65,
+          "inclusiveMs": 106.12070299999993
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.030957999999998265
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 12.430874999999986
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 30.022917000000007
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 118.854333
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 22.074292000000014
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 8.440958000000023
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 1.474125000000015
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 12.258541999999977
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 13.046958000000018
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 287.920875
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 302.03320799999995
+        }
+      },
+      "recordPreparationMs": 23.22312500000001,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    },
+    {
+      "trial": "published-50-3",
+      "reportSha256": "e6e320ec5a9fe97dac3dc2b11e08ed6329caff1b6ca675f1da53b0c79a91527a",
+      "source": {
+        "probeSha256": "c130ef36b52052513a4b3eac6a57f7882ffa4b5c05850449fdca7596b3f56bd5",
+        "publishedVersion": "0.8.0",
+        "neoHead": "0a24b36807a0b62999f6408819f8fdfa24d9a727",
+        "candidateHead": "6ab38802d3742903bcd063769ee2381042df7dea",
+        "candidateDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "rows": 50,
+      "mode": "published",
+      "resources": {
+        "cpuMicroseconds": {
+          "user": 263114,
+          "system": 46831
+        },
+        "maxRssBytes": 324616192,
+        "memoryAtEnd": {
+          "rss": 314802176,
+          "heapTotal": 273154048,
+          "heapUsed": 164600576,
+          "external": 7759527,
+          "arrayBuffers": 2221287
+        }
+      },
+      "totals": {
+        "repository.lookup": {
+          "count": 7,
+          "inclusiveMs": 0.3643339999999853
+        },
+        "fs.open": {
+          "count": 54,
+          "inclusiveMs": 2.403836000000041
+        },
+        "fs.sync": {
+          "count": 26,
+          "inclusiveMs": 73.73288100000002
+        },
+        "native.gzip": {
+          "count": 10,
+          "inclusiveMs": 11.593917000000175
+        },
+        "fs.writeFile": {
+          "count": 8,
+          "inclusiveMs": 0.7248740000000282
+        },
+        "native.gunzip": {
+          "count": 20,
+          "inclusiveMs": 2.6620009999998615
+        },
+        "repository.commit.run-start": {
+          "count": 1,
+          "inclusiveMs": 16.065416999999997
+        },
+        "flow.run.depth2": {
+          "count": 6,
+          "inclusiveMs": 267.221668
+        },
+        "flow.snapshot": {
+          "count": 8,
+          "inclusiveMs": 1.5646659999999883
+        },
+        "repository.read": {
+          "count": 65,
+          "inclusiveMs": 108.28129000000007
+        },
+        "fetch.synthetic": {
+          "count": 1,
+          "inclusiveMs": 0.02574999999998795
+        },
+        "repository.commit.capture": {
+          "count": 1,
+          "inclusiveMs": 8.964124999999996
+        },
+        "flow.run.depth3": {
+          "count": 1,
+          "inclusiveMs": 29.196875000000006
+        },
+        "trace.prepare-compress-save": {
+          "count": 2,
+          "inclusiveMs": 121.85075
+        },
+        "repository.commit.typed-points": {
+          "count": 1,
+          "inclusiveMs": 19.98145900000003
+        },
+        "repository.commit.intent": {
+          "count": 1,
+          "inclusiveMs": 8.539000000000044
+        },
+        "sink.encode-and-ack.synthetic": {
+          "count": 1,
+          "inclusiveMs": 1.4745410000000447
+        },
+        "repository.commit.result": {
+          "count": 1,
+          "inclusiveMs": 12.894375000000025
+        },
+        "repository.commit.summary": {
+          "count": 1,
+          "inclusiveMs": 13.802291999999966
+        },
+        "flow.run.depth1": {
+          "count": 1,
+          "inclusiveMs": 284.86566700000003
+        },
+        "writer.total": {
+          "count": 1,
+          "inclusiveMs": 298.263334
+        }
+      },
+      "recordPreparationMs": 23.15979200000001,
+      "proof": {
+        "traceCount": 2,
+        "identicalReferencesAndRecords": true,
+        "causeChecks": 2
+      }
+    }
+  ],
+  "medians": [
+    {
+      "rows": 50,
+      "mode": "published",
+      "medianMs": {
+        "repository.lookup": 0.38,
+        "fs.open": 2.846,
+        "fs.sync": 77.726,
+        "native.gzip": 11.998,
+        "fs.writeFile": 0.725,
+        "native.gunzip": 2.934,
+        "repository.commit.run-start": 16.105,
+        "flow.run.depth2": 268.927,
+        "flow.snapshot": 1.653,
+        "repository.read": 108.163,
+        "fetch.synthetic": 0.026,
+        "repository.commit.capture": 9.217,
+        "flow.run.depth3": 30.023,
+        "trace.prepare-compress-save": 121.851,
+        "repository.commit.typed-points": 20.585,
+        "repository.commit.intent": 8.539,
+        "sink.encode-and-ack.synthetic": 1.475,
+        "repository.commit.result": 12.259,
+        "repository.commit.summary": 13.047,
+        "flow.run.depth1": 287.921,
+        "writer.total": 302.033
+      },
+      "recordPreparationMs": 23.223,
+      "maxRssBytes": 325632000
+    },
+    {
+      "rows": 50,
+      "mode": "candidate",
+      "medianMs": {
+        "repository.lookup": 0.404,
+        "fs.open": 2.682,
+        "fs.sync": 67.615,
+        "native.gzip": 7.44,
+        "fs.writeFile": 0.699,
+        "native.gunzip": 2.662,
+        "repository.commit.run-start": 15.734,
+        "flow.run.depth2": 202.732,
+        "flow.snapshot": 1.64,
+        "repository.read": 115.374,
+        "fetch.synthetic": 0.03,
+        "repository.commit.capture": 9.329,
+        "flow.run.depth3": 29.004,
+        "trace.prepare-compress-save": 62.234,
+        "repository.commit.typed-points": 18.31,
+        "repository.commit.intent": 10.033,
+        "sink.encode-and-ack.synthetic": 1.489,
+        "repository.commit.result": 8.926,
+        "repository.commit.summary": 12.316,
+        "flow.run.depth1": 222.049,
+        "writer.total": 234.625
+      },
+      "recordPreparationMs": 23.257,
+      "maxRssBytes": 289161216
+    },
+    {
+      "rows": 256,
+      "mode": "published",
+      "medianMs": {
+        "repository.lookup": 0.473,
+        "fs.open": 2.657,
+        "fs.sync": 75.762,
+        "native.gzip": 47.564,
+        "fs.writeFile": 0.734,
+        "native.gunzip": 4.932,
+        "repository.commit.run-start": 16.712,
+        "flow.run.depth2": 1775.336,
+        "flow.snapshot": 12.292,
+        "repository.read": 821.285,
+        "fetch.synthetic": 0.026,
+        "repository.commit.capture": 12.148,
+        "flow.run.depth3": 176.409,
+        "trace.prepare-compress-save": 1319.273,
+        "repository.commit.typed-points": 35.836,
+        "repository.commit.intent": 9.669,
+        "sink.encode-and-ack.synthetic": 4.259,
+        "repository.commit.result": 8.949,
+        "repository.commit.summary": 9.24,
+        "flow.run.depth1": 1806.091,
+        "writer.total": 1819.944
+      },
+      "recordPreparationMs": 120.376,
+      "maxRssBytes": 1436286976
+    },
+    {
+      "rows": 256,
+      "mode": "candidate",
+      "medianMs": {
+        "repository.lookup": 0.519,
+        "fs.open": 3.542,
+        "fs.sync": 79.872,
+        "native.gzip": 26.966,
+        "fs.writeFile": 0.961,
+        "native.gunzip": 4.884,
+        "repository.commit.run-start": 15.693,
+        "flow.run.depth2": 954.258,
+        "flow.snapshot": 12.876,
+        "repository.read": 823.005,
+        "fetch.synthetic": 0.029,
+        "repository.commit.capture": 11.607,
+        "flow.run.depth3": 178.823,
+        "trace.prepare-compress-save": 486.991,
+        "repository.commit.typed-points": 38.078,
+        "repository.commit.intent": 10.832,
+        "sink.encode-and-ack.synthetic": 4.192,
+        "repository.commit.result": 10.085,
+        "repository.commit.summary": 9.23,
+        "flow.run.depth1": 986.96,
+        "writer.total": 1000.788
+      },
+      "recordPreparationMs": 122.87,
+      "maxRssBytes": 1309966336
+    }
+  ],
+  "proof": {
+    "traceComparisons": 24,
+    "causeComparisons": 24
+  },
+  "limitations": [
+    "Isolated single collection, not 14-cluster capacity or host soak proof",
+    "Inclusive nested timing columns overlap and must not be summed",
+    "Main-thread CPU sampling excludes native compression worker CPU",
+    "Test-only prototype/native probes add overhead; fetching and HTTP acknowledgements are synthetic",
+    "Peer replay checks run after timing/resource capture; no new device fetch or send",
+    "Cause equivalence uses existing test-helper limits, not proof of default-limit completeness",
+    "Warm namespace setup and fixture generation happen before timing"
+  ]
+}

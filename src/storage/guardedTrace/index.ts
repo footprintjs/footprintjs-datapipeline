@@ -2,7 +2,9 @@ import { lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TraceRecord, TraceRef } from '../../contracts.js';
 import type { TraceStore } from '../../ports.js';
-import { canonical, digest } from '../../validation.js';
+import { canonical } from '../../validation.js';
+import { createHash } from 'node:crypto';
+import { publishTraceBytes } from '../tracePublication.js';
 import { createFilesystemTraceStore, type FilesystemTraceStore } from '../filesystem.js';
 import { compressTrace, MAX_COMPRESSED_TRACE_CONTENT_BYTES } from '../traceCompression.js';
 import { checked, traceId, TRACE_METADATA_ALLOWANCE, TRACE_RETENTION_MS, TraceStorageError, type GuardedTraceOptions, type TraceStorageHealth, type TraceStorageReceipt, type TraceStorageGapReceipt } from './contracts.js';
@@ -47,26 +49,26 @@ export class GuardedFilesystemTraceStore implements TraceStore {
  }
  async store(trace: TraceRecord): Promise<TraceRef> {
   if (this.busy) throw new TraceStorageError('TRACE_STORE_BUSY');
-  let text: string, snapshot: TraceRecord;
+  let text: string;
   try {
    text = canonical(trace);
    if (Buffer.byteLength(text) > MAX_COMPRESSED_TRACE_CONTENT_BYTES) throw new Error();
-   snapshot = JSON.parse(text) as TraceRecord;
   } catch { throw new TraceStorageError('TRACE_INVALID_OPTIONS'); }
   return this.exclusive(async () => {
-   const ref: TraceRef = { kind: 'trace', id: digest(snapshot) }, now = this.now();
+   const ref: TraceRef = { kind: 'trace', id: createHash('sha256').update(text).digest('hex') }, now = this.now();
    const compressed = await compressTrace(text), disk = await capacity(this.path!);
    const reserved = Math.ceil(compressed.length / disk.block) * disk.block + TRACE_METADATA_ALLOWANCE;
    const result = this.ledger!.reserve(ref.id, reserved, now, disk.free, this.options);
    if (result.refusal) { this.alert({ code: result.refusal, receiptSaved: true, traceRef: ref }); throw new TraceStorageError(result.refusal); }
    if (result.existing) { this.available(result.existing); if (!await this.base!.read(ref)) throw new TraceStorageError('TRACE_STORAGE_UNCONFIRMED'); return ref; }
    try {
-   const saved = await this.base!.store(snapshot);
+   // Keep the existing reader's corruption/orphan check, without re-encoding.
+   if (await this.base!.read(ref) === undefined) await publishTraceBytes(join(this.path!, 'traces'), ref.id, compressed, true);
    const info = await lstat(join(this.path!, 'traces', `${ref.id}.json.gz`));
    if (!info.isFile() || info.isSymbolicLink()) throw new TraceStorageError('TRACE_STORAGE_UNCONFIRMED');
    this.ledger!.stored(ref.id, info.blocks * 512);
    if (this.ledger!.traceBytes() >= this.options.warningAtBytes) this.alert({ code: 'TRACE_BUDGET_WARNING', receiptSaved: true, traceRef: ref });
-   return saved;
+   return ref;
    } catch {
     let receiptSaved = false;
     try { this.ledger!.gap(ref.id, now); receiptSaved = true; } catch { /* An independent health channel must report receipt failure too. */ }

@@ -1,7 +1,9 @@
+import { ensureDirectory, syncDirectory, writeSynced } from './filesystemIo.js';
+import { publishTraceBytes } from './tracePublication.js';
 import { checkedWrite, validRef, sameRef, refKey } from './filesystemRecords.js';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, open, readFile, readdir, rename, rm } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import type {
   CommitReceipt, RecordRef, StoredRecord, TraceRecord, TraceRef,
 } from '../contracts.js';
@@ -60,30 +62,6 @@ function json(value: unknown): string {
 }
 
 
-async function syncDirectory(path: string): Promise<void> {
-  const handle = await open(path, 'r');
-  try { await handle.sync(); } finally { await handle.close(); }
-}
-
-async function ensureDirectory(path: string): Promise<void> {
-  const firstCreated = await mkdir(path, { recursive: true });
-  if (!firstCreated) return;
-  let cursor = path;
-  for (;;) {
-    await syncDirectory(cursor);
-    if (cursor === firstCreated) break;
-    cursor = dirname(cursor);
-  }
-  await syncDirectory(dirname(firstCreated));
-}
-
-async function writeSynced(path: string, text: string | Uint8Array): Promise<void> {
-  const handle = await open(path, 'wx', 0o600);
-  try {
-    await handle.writeFile(text, 'utf8');
-    await handle.sync();
-  } finally { await handle.close(); }
-}
 
 
 /**
@@ -323,16 +301,8 @@ export class FilesystemTraceStore implements TraceStore {
     const previous = await this.read({ kind: 'trace', id });
     if (previous !== undefined) return { kind: 'trace', id };
     const encoded = this.compression === 'gzip' ? await compressTrace(bytes) : bytes;
-    await ensureDirectory(this.traces);
-    const final = join(this.traces, `${id}.json${this.compression === 'gzip' ? '.gz' : ''}`);
-    const staging = await mkdtemp(join(this.traces, '.stage-'));
-    try {
-      const temporary = join(staging, 'trace.json');
-      await writeSynced(temporary, encoded);
-      await rename(temporary, final);
-      await syncDirectory(this.traces);
-      return { kind: 'trace', id };
-    } finally { await rm(staging, { recursive: true, force: true }); }
+    await publishTraceBytes(this.traces, id, encoded, this.compression === 'gzip');
+    return { kind: 'trace', id };
   }
 
   async read(ref: TraceRef): Promise<TraceRecord | undefined> {

@@ -1,7 +1,7 @@
 import { lstat, mkdir, realpath, stat, statfs } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
 import { TraceStorageError, type GuardedTraceOptions } from './contracts.js';
-export async function prepareDirectory(options: GuardedTraceOptions): Promise<string> {
+export async function prepareDirectory(options: Pick<GuardedTraceOptions, 'directory' | 'requireSeparateFilesystem'>): Promise<string> {
  const path = resolve(options.directory);
  if (!isAbsolute(options.directory) || path === parse(path).root) throw new TraceStorageError('TRACE_UNSAFE_FILESYSTEM');
  let ancestor = path;

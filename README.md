@@ -438,3 +438,11 @@ budgets, fixed-code gaps, reserved headroom and bounded thirty-day trace expiry.
 It is absent unless explicitly enabled, starts no timer, and changes no existing
 store. [Synthetic PowerScale sizing](docs/POWERSCALE_STORAGE_MEASUREMENT.md)
 records the reported settings, compatibility blockers and deployment limits.
+
+## Optional repository expiry
+
+The [retained filesystem repository](docs/REPOSITORY_RETENTION.md) adds explicit
+per-namespace expiry, durable pending intents, reference indexing and retained
+expiry receipts. It is absent unless enabled with a host-selected retention
+period, uses a new managed namespace, and starts no cleanup loop. Existing
+repositories, raw archives and collection behavior are unchanged.

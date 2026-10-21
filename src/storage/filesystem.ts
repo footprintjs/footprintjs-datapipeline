@@ -1,3 +1,4 @@
+import { checkedWrite, validRef, sameRef, refKey } from './filesystemRecords.js';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -48,8 +49,6 @@ interface Manifest {
 const MAX_RECORD_READ_CONCURRENCY = 8;
 
 const digest = (text: string | Uint8Array): string => createHash('sha256').update(text).digest('hex');
-const sameRef = (a: RecordRef, b: RecordRef): boolean => a.kind === b.kind && a.id === b.id;
-const refKey = (ref: RecordRef): string => `${ref.kind}:${ref.id}`;
 const recordFile = (ref: RecordRef): string => `${ref.kind}-${digest(refKey(ref))}.json`;
 const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
 const corrupt = (message: string): never => { throw new FilesystemRepositoryError('storage_corrupt', message); };
@@ -60,10 +59,6 @@ function json(value: unknown): string {
   catch { throw new FilesystemRepositoryError('invalid_json', 'Records must contain finite, acyclic, plain JSON values.'); }
 }
 
-function validRef(value: unknown): value is RecordRef {
-  const ref = value as RecordRef | undefined;
-  return !!ref && ['batch', 'observation', 'evidence'].includes(ref.kind) && typeof ref.id === 'string' && ref.id.length > 0;
-}
 
 async function syncDirectory(path: string): Promise<void> {
   const handle = await open(path, 'r');
@@ -90,46 +85,6 @@ async function writeSynced(path: string, text: string | Uint8Array): Promise<voi
   } finally { await handle.close(); }
 }
 
-function checkedWrite(write: CommitWrite): StoredRecord[] {
-  const fail = (message: string): never => { throw new FilesystemRepositoryError('invalid_commit', message); };
-  if (!write.operationId || !write.fingerprint) fail('An operation ID and request fingerprint are required.');
-  if (write.batch.operationId !== write.operationId || write.evidence.operationId !== write.operationId) {
-    fail('Batch and evidence must belong to the committed operation.');
-  }
-  if (write.batch.kind !== 'batch' || write.evidence.kind !== 'evidence' ||
-      write.observations.some(item => item.kind !== 'observation') || write.evidence.fingerprint !== write.fingerprint) {
-    fail('Record kinds and evidence fingerprint must match the commit.');
-  }
-  const records: StoredRecord[] = [write.batch, ...write.observations, write.evidence];
-  const keys = new Set<string>();
-  for (const record of records) {
-    if (!validRef(record.ref) || record.kind !== record.ref.kind) fail('A record must have its own matching reference.');
-    if (keys.has(refKey(record.ref))) fail('A commit cannot contain duplicate record references.');
-    keys.add(refKey(record.ref));
-  }
-  if (!sameRef(write.batch.evidenceRef, write.evidence.ref) || write.batch.outcome !== write.evidence.outcome) {
-    fail('Batch and evidence must agree on evidence reference and outcome.');
-  }
-  const supplied = new Set(write.observations.map(item => refKey(item.ref)));
-  if (write.batch.observationRefs.length !== supplied.size || new Set(write.batch.observationRefs.map(refKey)).size !== supplied.size ||
-      write.batch.observationRefs.some(ref => !supplied.has(refKey(ref)))) fail('Batch membership must match the supplied observations.');
-  for (const observation of write.observations) {
-    if (observation.externalArtifactRef !== undefined) {
-      throw new FilesystemRepositoryError('external_artifact_unsupported', 'This repository does not verify or store external artifact bytes; inline the payload or use an artifact-aware repository.');
-    }
-    if (!Object.prototype.hasOwnProperty.call(observation, 'payload') || observation.payload === undefined) {
-      fail('An observation must contain an inline JSON payload.');
-    }
-    if (!sameRef(observation.batchRef, write.batch.ref) || !sameRef(observation.evidenceRef, write.evidence.ref)) {
-      fail('Every observation must reference this batch and evidence.');
-    }
-  }
-  const outputs = new Set(write.evidence.outputRefs.map(refKey));
-  const expected = [write.batch.ref, ...write.observations.map(item => item.ref)];
-  if (outputs.size !== expected.length || write.evidence.outputRefs.length !== expected.length ||
-      expected.some(ref => !outputs.has(refKey(ref)))) fail('Evidence outputs must match this batch and observations.');
-  return records;
-}
 
 /**
  * File-backed reference backend for one host and a modest number of operations.
@@ -158,7 +113,7 @@ export class FilesystemRepository implements Repository {
     this.packedReads = new PackedReads(path => readPackedOperation<Manifest>(path, this.maxPackedBytes));
   }
 
-  private async operation(operationDirectory: string): Promise<{ manifest: Manifest; packed?: ReadonlyMap<string, string> }> {
+  protected async operation(operationDirectory: string): Promise<{ manifest: Manifest; packed?: ReadonlyMap<string, string> }> {
     const loaded = await readOperationEncoding(operationDirectory, this.packedReads);
     const value = loaded.manifest;
     if (value?.version !== 1 || typeof value.operationId !== 'string' || typeof value.fingerprint !== 'string' ||
@@ -175,7 +130,7 @@ export class FilesystemRepository implements Repository {
     return loaded;
   }
 
-  private async record(directory: string, entry: Entry, packed?: ReadonlyMap<string, string>): Promise<StoredRecord> {
+  protected async record(directory: string, entry: Entry, packed?: ReadonlyMap<string, string>): Promise<StoredRecord> {
     let bytes: string;
     try {
       const loaded = packed ? packed.get(entry.file) : await readFile(join(directory, entry.file), 'utf8');
@@ -404,3 +359,6 @@ export function createFilesystemTraceStore(options: FilesystemTraceOptions): Fil
 
 export { createGuardedFilesystemTraceStore, GuardedFilesystemTraceStore, TraceStorageError, TRACE_RETENTION_MS } from './guardedTrace/index.js';
 export type { GuardedTraceOptions, TraceStorageHealth, TraceStorageReceipt, TraceStorageGapReceipt, TraceStorageCode } from './guardedTrace/index.js';
+
+export { createRetainedFilesystemRepository, RetainedFilesystemRepository, RepositoryRetentionError } from './retainedRepository/index.js';
+export type { RetainedRepositoryOptions, RepositoryRetentionReceipt, RepositoryRetentionCode } from './retainedRepository/index.js';

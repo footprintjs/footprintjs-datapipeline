@@ -45,7 +45,8 @@
     "docs/TRACE_STORAGE_BUDGET.md",
     "docs/POWERSCALE_STORAGE_MEASUREMENT.md",
     "docs/measurements",
-    "docs/PACKED_REPOSITORY.md"
+    "docs/PACKED_REPOSITORY.md",
+    "docs/REPOSITORY_RETENTION.md"
   ],
   "sideEffects": false,
   "scripts": {

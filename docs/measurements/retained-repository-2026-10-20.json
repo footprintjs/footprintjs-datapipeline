@@ -1,0 +1,67 @@
+{
+  "provenance": "LOCAL SEED; actual inactive writer and candidate repository; simulated sink",
+  "policy": "100 ms controlled-clock TTL ONLY for expiry proof, not a deployment recommendation",
+  "reports": [
+    {
+      "returnedRows": 50,
+      "counts": {
+        "seen": 50,
+        "selected": 50,
+        "excluded": 0,
+        "rejected": 0,
+        "admitted": 50
+      },
+      "records": 69,
+      "operations": 6,
+      "causeChecks": 2,
+      "captureAndSendCount": {
+        "captures": 1,
+        "sends": 1
+      },
+      "plainBytes": {
+        "other": 202337
+      },
+      "retainedBeforeExpiry": {
+        "compressed": 27458,
+        "metadata": 49152
+      },
+      "retainedAfterExpiry": {
+        "metadata": 49152
+      },
+      "expiredReferenceStillExplicit": true
+    },
+    {
+      "returnedRows": 256,
+      "counts": {
+        "seen": 256,
+        "selected": 154,
+        "excluded": 102,
+        "rejected": 0,
+        "admitted": 154
+      },
+      "records": 173,
+      "operations": 6,
+      "causeChecks": 2,
+      "captureAndSendCount": {
+        "captures": 1,
+        "sends": 1
+      },
+      "plainBytes": {
+        "other": 617281
+      },
+      "retainedBeforeExpiry": {
+        "compressed": 71540,
+        "metadata": 69632
+      },
+      "retainedAfterExpiry": {
+        "metadata": 69632
+      },
+      "expiredReferenceStillExplicit": true
+    }
+  ],
+  "limitations": [
+    "No live environment or sustained throughput proof",
+    "SQLite metadata/tombstones retained indefinitely and measured separately",
+    "Trace files are separate and not deleted by repository expiry"
+  ]
+}

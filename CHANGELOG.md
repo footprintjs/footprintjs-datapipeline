@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Optional retained filesystem repository for new namespaces: explicit retention period, pending intent/recovery, exact packed records, hashed ownership index, bounded read batching, expired references and durable tombstones before bounded cleanup. No automatic policy, timer, migration, repository disk quota or activation.
+
 ## [0.8.0] - 2026-10-20
 
 ### Added

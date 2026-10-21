@@ -1,0 +1,223 @@
+{
+  "scope": "LOCAL SEED; offline prototype/design only; no production implementation, deployment or admission protocol",
+  "date": "2026-10-21",
+  "library": {
+    "name": "footprintjs-datapipeline",
+    "version": "0.9.0",
+    "sourceCommit": "b550436f6f84ed99d498ea99b99dc638cc0de0df"
+  },
+  "sourceFixture": {
+    "neoImplementationSha256": "3f0acf23e7a2c1915bdbbdd6fe42200a5033ec33668c3106c1703e730d5e4a07",
+    "neoDiagnosticRunnerSha256": "d82ae78bddd8c40eab835bfeb354e08f940d58a226f564b1c39b2ec17ba29ef8",
+    "pollsPerCase": 3000,
+    "operationsPerCase": 6000,
+    "referenceMembershipsPerCase": 21000,
+    "intervalMs": 5000,
+    "sourceRows": 256,
+    "watchedClients": 1,
+    "sourceInputsWereClosedAndReadOnly": true
+  },
+  "inputLedgers": [
+    {
+      "case": "client-poll-memory-default-20261021",
+      "namespace": "acquisition",
+      "bytes": 3014656,
+      "sha256": "37a847a1fa8827fd0b7e1a8d963067d8994815a54805a20cdd0dc10af26888c2"
+    },
+    {
+      "case": "client-poll-memory-default-20261021",
+      "namespace": "compact",
+      "bytes": 3682304,
+      "sha256": "8c6719b21375343c8c80fd05c3fb2ab68bb7d5066691a8d8ee93aadb8dff956e"
+    },
+    {
+      "case": "client-poll-memory-heap128-20261021",
+      "namespace": "acquisition",
+      "bytes": 3014656,
+      "sha256": "aa5222405029c2e43b7cd1787845132a03a2de25c9f7ab2025698cccdf74916a"
+    },
+    {
+      "case": "client-poll-memory-heap128-20261021",
+      "namespace": "compact",
+      "bytes": 3682304,
+      "sha256": "bdfa107ecbed04dcf1919d84e7341888773e8588284d613bd2c650befb731ff5"
+    }
+  ],
+  "identityProof": {
+    "sameIdentityDifferentValues": true,
+    "sameOperationId": true,
+    "sameObservationRefs": true,
+    "sameRequestFingerprint": true,
+    "differentWriteHashes": true,
+    "originalFilesystemCommittedAt": "not recoverable from expired ledger; not claimed replayed"
+  },
+  "results": [
+    {
+      "case": "client-poll-memory-default-20261021",
+      "baselineBytes": 6696960,
+      "encodings": {
+        "genericFullLedger": {
+          "bytes": 1447399,
+          "allocatedBytes": 1449984,
+          "gzipBytes": 1385502,
+          "gzipAllocatedBytes": 1388544,
+          "sha256": "ecaa455809e8b99d11913961597b5715748e871b840e3afc2783b89e7fbf0cd7",
+          "gzipSha256": "d045183bda3dba1ab72dcfcb80aa0ed9ef76aa0b66599a328681c275e786d282",
+          "headerDirectoryBytes": 1367,
+          "footerBytes": 32
+        },
+        "pollProfileFullLedger": {
+          "bytes": 1372841,
+          "allocatedBytes": 1376256,
+          "gzipBytes": 1345887,
+          "gzipAllocatedBytes": 1347584,
+          "sha256": "0ad1f948e88212e56abfabb39f18cc7758f6115fedd5b19c7da78131e84e7e76",
+          "gzipSha256": "18f2140badb61804eeb14076f13d8dd160f7d011f16dafff88ad93f0d2d5c638",
+          "headerDirectoryBytes": 3209,
+          "footerBytes": 32
+        },
+        "genericTerminalPublicReceipts": {
+          "bytes": 1063393,
+          "allocatedBytes": 1064960,
+          "gzipBytes": 993714,
+          "gzipAllocatedBytes": 995328,
+          "sha256": "65ec788b1137a1b5dde9a92a8731f7c74d02e2aa5b6fd81795d0605df78ea446",
+          "gzipSha256": "5b7020dd1d6cc48943b8e18f912381ddef8abc757ea07f58e25bff5b0c453f8b",
+          "headerDirectoryBytes": 1361,
+          "footerBytes": 32
+        }
+      }
+    },
+    {
+      "case": "client-poll-memory-heap128-20261021",
+      "baselineBytes": 6696960,
+      "encodings": {
+        "genericFullLedger": {
+          "bytes": 1447399,
+          "allocatedBytes": 1449984,
+          "gzipBytes": 1385546,
+          "gzipAllocatedBytes": 1388544,
+          "sha256": "fafc35f62882f85693d4f9cffdb45df46764c735382f6b125951ca1b3d57d475",
+          "gzipSha256": "a9dc2d5a21a71304990d9d869b9d90da7c1c8ee2ec513c7c95c3293ee98d81a0",
+          "headerDirectoryBytes": 1367,
+          "footerBytes": 32
+        },
+        "pollProfileFullLedger": {
+          "bytes": 1372841,
+          "allocatedBytes": 1376256,
+          "gzipBytes": 1345887,
+          "gzipAllocatedBytes": 1347584,
+          "sha256": "5780652d0a56c8d2510ee65216d88c279c8949e67698b6d37a30f471ec1e982e",
+          "gzipSha256": "e3e964bfae957fd79c4fa086360119878719713f7fad78c552fc56450941efee",
+          "headerDirectoryBytes": 3209,
+          "footerBytes": 32
+        },
+        "genericTerminalPublicReceipts": {
+          "bytes": 1063393,
+          "allocatedBytes": 1064960,
+          "gzipBytes": 993719,
+          "gzipAllocatedBytes": 995328,
+          "sha256": "508fc9b833612e0a7c8daf45355bf06950be679b942c2d316604129316570b3f",
+          "gzipSha256": "654c5df79eb3cee478473bc9e8d5963dd313a88c56f71b84b5b2ab908c7568d3",
+          "headerDirectoryBytes": 1361,
+          "footerBytes": 32
+        }
+      }
+    }
+  ],
+  "proofs": {
+    "exactInternalRowsReplayedPerCase": 6000,
+    "exactMembershipsReplayedPerCase": 21000,
+    "fullInternalVariants": [
+      "genericFullLedger",
+      "pollProfileFullLedger"
+    ],
+    "terminalVariant": "public receipt and membership equivalence only; request/write hashes intentionally omitted; pending/not-deleted refused",
+    "knownAndAlteredLookupChecksPerCase": 162000,
+    "knownAndAlteredLookupChecksAcrossBoth": 324000,
+    "publicReceiptTypeMapping": "confirmed -> committed/unconfirmed; dataDeleted -> boolean",
+    "syntheticEdgeSlots": [
+      "complete",
+      "gap",
+      "failed",
+      "partial",
+      "empty",
+      "complete",
+      "unconfirmed"
+    ],
+    "missingFailedPartialEmptyAndUnknownRemainDistinct": true,
+    "timestampExceptionMs": 37,
+    "horizonExampleOnly": {
+      "keptWindows": 2,
+      "membershipsStillExactlyExpired": 840,
+      "olderMembershipsReturnHistoryUnavailable": 20160,
+      "unknownForeignReturnsSameUnavailable": true,
+      "neverExistedNotInferred": true
+    },
+    "containerCorruptionRefused": true,
+    "overLimitInflateRefused": true,
+    "truncatedAndTrailingGzipRefused": true,
+    "sourceLedgersUnchanged": true
+  },
+  "formatAccounting": {
+    "checksums": "SHA-256 per section/window plus complete container; consistency only, not producer authentication",
+    "profileFullLedgerComponentsBytes": {
+      "windowBlocksIncludingMasksExceptionsAndHashes": 392800,
+      "windowDirectoryIncludingChecksums": 4800,
+      "exactOperationHashToSlotIndex": 216000,
+      "exactReferenceHashToOwnerIndex": 756000,
+      "headerDirectoryAndFooter": 3241
+    },
+    "genericOperationRecordBytes": 115,
+    "genericMembershipRecordBytes": 36,
+    "terminalOperationRecordBytes": 51,
+    "profileIncrementalReductionBytesVersusGeneric": 74558,
+    "profileIncrementalReductionPercent": 5.1512
+  },
+  "limits": {
+    "decodeMaxBytes": 16777216,
+    "productionBackend": false,
+    "crashSafeMigrationProven": false,
+    "randomAccessLatencyMeasured": false,
+    "liveAdmissionProtocolImplemented": false,
+    "horizonLengthChosen": false,
+    "inflateOverLimitRefused": true,
+    "truncatedAndTrailingGzipRefused": true
+  },
+  "ownerDecisions": {
+    "keptHistoryHorizonMs": null,
+    "namespaceRetirementAdmissionContract": "requires separate approval and proof"
+  },
+  "recommendation": "Generic exact immutable terminal segments first; bitmap-specific profile saves only another 5.15%. Keep current exact history until finite-history/epoch rules are approved.",
+  "unmeasured": [
+    "hot SQLite and live WAL",
+    "global multi-segment routing/catalogue",
+    "temporary migration copies",
+    "fsync and compaction latency",
+    "crash-safe seal/handoff",
+    "live admission after history retirement",
+    "production throughput or memory",
+    "native cause replay against expired payloads"
+  ],
+  "reproduction": {
+    "preconditions": [
+      "two closed sibling diagnostic folders with the listed hashes",
+      "existing Neo dependencies pinned to datapipeline 0.9.0",
+      "PROTOTYPE_DIR contains the three scratch scripts",
+      "no services/install/devices/network required"
+    ],
+    "commands": [
+      "python3 \"$PROTOTYPE_DIR/export_ledgers.py\"",
+      "cd \"$NEO_CHECKOUT\"",
+      "node --max-old-space-size=128 --import tsx \"$PROTOTYPE_DIR/capture_ids.mts\" \"$PROTOTYPE_DIR\" \"$NEO_CHECKOUT\"",
+      "python3 \"$PROTOTYPE_DIR/encode_segments.py\""
+    ]
+  },
+  "commitGuidance": "Commit this small JSON, REPORT.md and optionally the three scratch scripts; do not commit the 40 MiB captures/binaries.",
+  "scriptHashes": {
+    "export_ledgers.py": "32adac6c420dfb2e180e64bd0a209faaa6cd64ded06a40cd1d1a9575e5e6dcea",
+    "capture_ids.mts": "8740cbeff5760c8885331aa893ff31adf292abf4621194b45745b5215766af87",
+    "encode_segments.py": "f72faac85f8a8982d0a424ec2b0e406c41fc07039602255dbc3fd0cff4dbcebd"
+  },
+  "reportMarkdownSha256": "680349b974ce8fa91c9cff44d138e4c728e006acd47863c5ea4ac2b8656d6894"
+}

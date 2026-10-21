@@ -1,11 +1,11 @@
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { canonical } from '../../validation.js';
-import type { SealedHistoryPublication } from './contracts.js';
+import { fail, type SealedHistoryPublication } from './contracts.js';
 import { decodeHistory } from './decode.js';
 import { readCatalogue, type Catalogue } from './catalogue.js';
 import { linkOnce, privateDirectory, readBounded, stagedFile, syncDirectory } from './files.js';
-import { fail, hash } from './layout.js';
+import { hash } from './layout.js';
 
 export async function publishSnapshot(directory: string, bytes: Buffer, retentionMs: number, limit: number): Promise<SealedHistoryPublication> {
   const decoded = decodeHistory(bytes, retentionMs, limit), sha256 = hash(bytes);

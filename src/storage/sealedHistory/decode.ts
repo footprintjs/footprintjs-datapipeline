@@ -1,5 +1,6 @@
-import type { SealedHistoryOperation } from './contracts.js';
-import { CHECKSUM_BYTES, HEADER_BYTES, MAGIC, OPERATION_BYTES, REFERENCE_BYTES, fail, hash, readRow, sizeOf, terminal, validRow } from './layout.js';
+import { fail, type SealedHistoryOperation } from './contracts.js';
+import { CHECKSUM_BYTES, HEADER_BYTES, MAGIC, OPERATION_BYTES, REFERENCE_BYTES, hash, readRow, sizeOf } from './layout.js';
+import { isSealable, validRow } from './rules.js';
 
 export interface DecodedHistory {
   readonly counts: { readonly operations: number; readonly references: number };
@@ -18,32 +19,43 @@ function search(bytes: Buffer, hash: string, count: number, start: number, strid
   }
   return -1;
 }
-/** Detached, bounded metadata only. Not a source-data or cause-record reader. */
-export function decodeHistory(input: Uint8Array, retentionMs: number, limit: number): DecodedHistory {
-  if (input.byteLength > limit) fail('SEALED_HISTORY_LIMIT');
-  const bytes = Buffer.from(input);
+function checkHeader(bytes: Buffer, retentionMs: number) {
   if (bytes.length < HEADER_BYTES + CHECKSUM_BYTES || !bytes.subarray(0, 8).equals(MAGIC)) fail('SEALED_HISTORY_CORRUPT');
   if (bytes.readUInt32BE(8) !== 1) fail('SEALED_HISTORY_UNSUPPORTED_FORMAT');
   const operations = bytes.readUInt32BE(24), references = bytes.readUInt32BE(28);
   const refOffset = HEADER_BYTES + operations * OPERATION_BYTES;
   const bodyEnd = sizeOf(operations, references) - CHECKSUM_BYTES;
-  if (bodyEnd + CHECKSUM_BYTES !== bytes.length || bytes.readUInt32BE(12) !== HEADER_BYTES ||
-      bytes.readBigUInt64BE(16) !== BigInt(retentionMs) || bytes.readUInt32BE(32) !== HEADER_BYTES ||
-      bytes.readUInt32BE(36) !== refOffset || bytes.readUInt32BE(40) !== bodyEnd ||
-      bytes.subarray(44, HEADER_BYTES).some(byte => byte !== 0) ||
-      hash(bytes.subarray(0, bodyEnd)) !== bytes.toString('hex', bodyEnd)) fail('SEALED_HISTORY_CORRUPT');
+  if (bodyEnd + CHECKSUM_BYTES !== bytes.length) fail('SEALED_HISTORY_CORRUPT');
+  if (bytes.readUInt32BE(12) !== HEADER_BYTES || bytes.readUInt32BE(32) !== HEADER_BYTES ||
+      bytes.readUInt32BE(36) !== refOffset || bytes.readUInt32BE(40) !== bodyEnd) fail('SEALED_HISTORY_CORRUPT');
+  if (bytes.readBigUInt64BE(16) !== BigInt(retentionMs) || bytes.subarray(44, HEADER_BYTES).some(byte => byte !== 0)) fail('SEALED_HISTORY_CORRUPT');
+  if (hash(bytes.subarray(0, bodyEnd)) !== bytes.toString('hex', bodyEnd)) fail('SEALED_HISTORY_CORRUPT');
+  return { operations, references, refOffset };
+}
+function checkRows(bytes: Buffer, operations: number, retentionMs: number): boolean {
   let allTerminal = true;
   for (let index = 0; index < operations; index++) {
     const row = readRow(bytes, index), offset = HEADER_BYTES + index * OPERATION_BYTES;
     if (!validRow(row, retentionMs) || bytes[offset + 114]! > 1 ||
         (index && Buffer.compare(bytes.subarray(offset - OPERATION_BYTES, offset - OPERATION_BYTES + 32), bytes.subarray(offset, offset + 32)) >= 0)) fail('SEALED_HISTORY_CORRUPT');
-    allTerminal &&= terminal(row);
+    allTerminal &&= isSealable(row);
   }
+  return allTerminal;
+}
+function checkReferences(bytes: Buffer, operations: number, references: number, refOffset: number): void {
   for (let index = 0; index < references; index++) {
     const offset = refOffset + index * REFERENCE_BYTES;
     if (bytes.readUInt32BE(offset + 32) >= operations ||
         (index && Buffer.compare(bytes.subarray(offset - REFERENCE_BYTES, offset - REFERENCE_BYTES + 32), bytes.subarray(offset, offset + 32)) >= 0)) fail('SEALED_HISTORY_CORRUPT');
   }
+}
+/** Detached, bounded metadata only. Not a source-data or cause-record reader. */
+export function decodeHistory(input: Uint8Array, retentionMs: number, limit: number): DecodedHistory {
+  if (input.byteLength > limit) fail('SEALED_HISTORY_LIMIT');
+  const bytes = Buffer.from(input);
+  const { operations, references, refOffset } = checkHeader(bytes, retentionMs);
+  const allTerminal = checkRows(bytes, operations, retentionMs);
+  checkReferences(bytes, operations, references, refOffset);
   return Object.freeze({
     counts: Object.freeze({ operations, references }), terminal: allTerminal,
     row(value: string) {

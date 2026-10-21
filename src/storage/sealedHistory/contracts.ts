@@ -13,6 +13,7 @@ export class SealedHistoryError extends Error {
     this.name = 'SealedHistoryError';
   }
 }
+export function fail(code: SealedHistoryCode): never { throw new SealedHistoryError(code); }
 export const MAX_SEALED_HISTORY_BYTES = 16 * 1024 * 1024;
 export interface SealedHistoryOptions {
   readonly enabled?: boolean;
@@ -43,12 +44,18 @@ export interface SealedHistoryPublication {
   readonly operations: number;
   readonly references: number;
 }
+export type SealedHistoryLookup =
+  | { readonly state: 'found'; readonly operation: SealedHistoryOperation }
+  | { readonly state: 'not-in-snapshot' };
+export type SealedHistoryReceiptLookup =
+  | { readonly state: 'found'; readonly receipt: RepositoryRetentionReceipt }
+  | { readonly state: 'not-in-snapshot' };
 export interface SealedHistoryView {
   readonly counts: { readonly operations: number; readonly references: number };
-  /** Absence means only "not in this selected snapshot". */
-  lookupOperation(operationId: string): SealedHistoryOperation | undefined;
-  lookupReference(ref: RecordRef): SealedHistoryOperation | undefined;
-  receipt(operationId: string): RepositoryRetentionReceipt | undefined;
+  /** A miss names only this selected snapshot; it cannot authorize admission. */
+  lookupOperation(operationId: string): SealedHistoryLookup;
+  lookupReference(ref: RecordRef): SealedHistoryLookup;
+  receipt(operationId: string): SealedHistoryReceiptLookup;
 }
 export interface SealedFilesystemHistory {
   /** One immutable selected snapshot; not migration, compaction or admission. */

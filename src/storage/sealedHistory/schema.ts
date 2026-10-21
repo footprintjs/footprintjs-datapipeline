@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { fail } from './layout.js';
+import { fail } from './contracts.js';
 
 /** Empty legacy guards keep an old constructor probe from changing the schema. */
 const tables = {
@@ -23,6 +23,8 @@ export function createSchema(db: DatabaseSync, retentionMs: number): void {
   db.exec("INSERT INTO sealed_history VALUES(1,'exact-metadata',1)");
 }
 export function checkSchema(db: DatabaseSync, retentionMs: number): void {
+  const mode = db.prepare('PRAGMA journal_mode').get()?.journal_mode;
+  if (mode !== 'delete' && mode !== 'wal') fail('SEALED_HISTORY_UNMANAGED');
   const actual = db.prepare('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name').all();
   const policy = actual.find(row => row.name === 'policy');
   if (policy?.type !== 'table' || policy.sql !== tables.policy) fail('SEALED_HISTORY_CORRUPT');

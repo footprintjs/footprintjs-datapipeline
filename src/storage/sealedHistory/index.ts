@@ -3,35 +3,37 @@ import { digest } from '../../validation.js';
 import { validRef } from '../filesystemRecords.js';
 import { operationHash } from '../retainedRepository/commit.js';
 import { readCatalogue } from './catalogue.js';
-import { MAX_SEALED_HISTORY_BYTES, SealedHistoryError, type SealedFilesystemHistory, type SealedHistoryOptions, type SealedHistorySnapshot, type SealedHistoryView } from './contracts.js';
+import { MAX_SEALED_HISTORY_BYTES, SealedHistoryError, fail, type SealedFilesystemHistory, type SealedHistoryLookup, type SealedHistoryOperation, type SealedHistoryOptions, type SealedHistorySnapshot, type SealedHistoryView } from './contracts.js';
 import { encodeHistory } from './encode.js';
 import { decodeHistory, type DecodedHistory } from './decode.js';
-import { missing, rootDirectory } from './files.js';
-import { fail } from './layout.js';
+import { accessDenied, rootDirectory } from './files.js';
 import { checkNamespace, initializeNamespace } from './namespace.js';
 import { publishSnapshot } from './publication.js';
 
 export { MAX_SEALED_HISTORY_BYTES, SealedHistoryError } from './contracts.js';
-export type { SealedFilesystemHistory, SealedHistoryOptions, SealedHistoryOperation, SealedHistorySnapshot, SealedHistoryPublication, SealedHistoryView, SealedHistoryCode } from './contracts.js';
+export type { SealedFilesystemHistory, SealedHistoryOptions, SealedHistoryOperation, SealedHistorySnapshot, SealedHistoryPublication, SealedHistoryView, SealedHistoryLookup, SealedHistoryReceiptLookup, SealedHistoryCode } from './contracts.js';
 function checked<T>(task: () => T): T {
   try { return task(); }
   catch (error) { if (error instanceof SealedHistoryError) throw error; return fail('SEALED_HISTORY_INVALID_OPTIONS'); }
 }
 function view(decoded: DecodedHistory): SealedHistoryView {
+  const absent = Object.freeze({ state: 'not-in-snapshot' as const });
+  const result = (operation: SealedHistoryOperation | undefined): SealedHistoryLookup =>
+    operation ? Object.freeze({ state: 'found', operation }) : absent;
   const lookupOperation = (id: string) => checked(() => {
     if (typeof id !== 'string' || !id) fail('SEALED_HISTORY_INVALID_OPTIONS');
-    return decoded.row(operationHash(id));
+    return result(decoded.row(operationHash(id)));
   });
   return Object.freeze({ counts: decoded.counts, lookupOperation,
     lookupReference(ref: RecordRef) { return checked(() => {
       if (!validRef(ref)) fail('SEALED_HISTORY_INVALID_OPTIONS');
-      return decoded.owner(digest(ref));
+      return result(decoded.owner(digest(ref)));
     }); },
     receipt(id: string) {
-      const row = lookupOperation(id);
-      if (!row) return undefined;
-      const { fingerprint: _fingerprint, writeHash: _writeHash, ...receipt } = row;
-      return Object.freeze(receipt);
+      const found = lookupOperation(id);
+      if (found.state === 'not-in-snapshot') return found;
+      const { fingerprint: _fingerprint, writeHash: _writeHash, ...receipt } = found.operation;
+      return Object.freeze({ state: 'found' as const, receipt: Object.freeze(receipt) });
     },
   });
 }
@@ -65,7 +67,7 @@ export function createSealedFilesystemHistory(options: SealedHistoryOptions): Se
         return view(loaded.decoded);
       } catch (error) {
         if (error instanceof SealedHistoryError) throw error;
-        return fail(missing(error) ? 'SEALED_HISTORY_UNAVAILABLE' : 'SEALED_HISTORY_CORRUPT');
+        return fail(accessDenied(error) ? 'SEALED_HISTORY_UNMANAGED' : 'SEALED_HISTORY_UNAVAILABLE');
       }
     },
   });

@@ -1,5 +1,6 @@
-import type { SealedHistoryOperation, SealedHistorySnapshot } from './contracts.js';
-import { CHECKSUM_BYTES, HEADER_BYTES, MAGIC, OPERATION_BYTES, REFERENCE_BYTES, fail, hash, isHash, sizeOf, validRow, writeRow } from './layout.js';
+import { fail, type SealedHistoryOperation, type SealedHistorySnapshot } from './contracts.js';
+import { CHECKSUM_BYTES, HEADER_BYTES, MAGIC, OPERATION_BYTES, REFERENCE_BYTES, hash, isHash, sizeOf, writeRow } from './layout.js';
+import { validRow } from './rules.js';
 
 /** Reject accessors/extra fields instead of invoking code or silently dropping metadata. */
 function plain(value: unknown, keys: readonly string[]): boolean {

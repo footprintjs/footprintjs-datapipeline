@@ -361,7 +361,7 @@ export { createGuardedFilesystemTraceStore, GuardedFilesystemTraceStore, TraceSt
 export type { GuardedTraceOptions, TraceStorageHealth, TraceStorageReceipt, TraceStorageGapReceipt, TraceStorageCode } from './guardedTrace/index.js';
 
 export { createSealedFilesystemHistory, SealedHistoryError, MAX_SEALED_HISTORY_BYTES } from './sealedHistory/index.js';
-export type { SealedFilesystemHistory, SealedHistoryOptions, SealedHistoryOperation, SealedHistorySnapshot, SealedHistoryPublication, SealedHistoryView, SealedHistoryCode } from './sealedHistory/index.js';
+export type { SealedFilesystemHistory, SealedHistoryOptions, SealedHistoryOperation, SealedHistorySnapshot, SealedHistoryPublication, SealedHistoryView, SealedHistoryLookup, SealedHistoryReceiptLookup, SealedHistoryCode } from './sealedHistory/index.js';
 
 export { createRetainedFilesystemRepository, RetainedFilesystemRepository, RepositoryRetentionError } from './retainedRepository/index.js';
 export type { RetainedRepositoryOptions, RepositoryRetentionReceipt, RepositoryRetentionCode } from './retainedRepository/index.js';

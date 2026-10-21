@@ -65,15 +65,15 @@ for (const sample of history.cases) {
     const saved = await store.publish({ operations, references: source.refs });
     const view = await store.open(); let operationChecks = 0, referenceChecks = 0;
     for (const row of identities.rows.filter(row => row.namespace === name)) {
-      const actual = view.lookupOperation(row.operationId); deepStrictEqual(actual, expected.get(row.operationHash)); operationChecks++;
+      const actual = view.lookupOperation(row.operationId); deepStrictEqual(actual, { state: 'found', operation: expected.get(row.operationHash) }); operationChecks++;
       for (const ref of row.refs) {
         // Native refs only; logical-key/test-helper additions are not hashed.
         deepStrictEqual(view.lookupReference({ kind: ref.kind, id: ref.id }), actual); referenceChecks++;
       }
     }
     strictEqual(operationChecks, operations.length); strictEqual(referenceChecks, source.refs.length);
-    strictEqual(view.lookupOperation('foreign-operation'), undefined);
-    strictEqual(view.lookupReference({ kind: 'observation', id: 'altered-or-foreign' }), undefined);
+    deepStrictEqual(view.lookupOperation('foreign-operation'), { state: 'not-in-snapshot' });
+    deepStrictEqual(view.lookupReference({ kind: 'observation', id: 'altered-or-foreign' }), { state: 'not-in-snapshot' });
     const stored = await files(directory);
     measurements.push({ namespace: name, originalBytes: source.sourceBytes, originalSha256: source.sourceSha256,
       retentionMs: source.policy.retentionMs, saved, operationChecks, referenceChecks, files: stored,

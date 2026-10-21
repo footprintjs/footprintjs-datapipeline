@@ -1,8 +1,8 @@
 import { join } from 'node:path';
-import type { SealedHistoryPublication } from './contracts.js';
+import { fail, type SealedHistoryPublication } from './contracts.js';
 import { decodeHistory, type DecodedHistory } from './decode.js';
 import { missing, privateDirectory, readBounded } from './files.js';
-import { fail, hash, isHash } from './layout.js';
+import { hash, isHash } from './layout.js';
 
 export interface Catalogue {
   readonly version: 1;

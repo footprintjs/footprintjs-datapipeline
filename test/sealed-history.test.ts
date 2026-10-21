@@ -61,16 +61,17 @@ it('publishes a detached exact view and reconciles identical ordering changes', 
   expect(saved).toMatchObject({ status: 'stored', operations: 2, references: 6 });
   expect(await store.publish({ operations: [...input.operations].reverse(), references: [...input.references].reverse() })).toEqual(saved);
   const view = await store.open();
-  expect(view.lookupOperation('operation-0')).toEqual(input.operations[0]);
-  expect(view.lookupReference({ kind: 'observation', id: 'item-1-2' })).toEqual(input.operations[1]);
-  expect(view.receipt('operation-0')).toEqual({ operationHash: input.operations[0]!.operationHash,
-    acceptedAt: 0, expiresAt: 100, status: 'expired' as const, publication: 'committed' as const, dataDeleted: true });
-  expect(view.lookupOperation('foreign-operation')).toBeUndefined();
-  expect(view.lookupReference({ kind: 'batch', id: 'item-1-2' })).toBeUndefined();
+  expect(view.lookupOperation('operation-0')).toEqual({ state: 'found', operation: input.operations[0] });
+  expect(view.lookupReference({ kind: 'observation', id: 'item-1-2' })).toEqual({ state: 'found', operation: input.operations[1] });
+  expect(view.receipt('operation-0')).toEqual({ state: 'found', receipt: { operationHash: input.operations[0]!.operationHash,
+    acceptedAt: 0, expiresAt: 100, status: 'expired' as const, publication: 'committed' as const, dataDeleted: true } });
+  expect(view.lookupOperation('foreign-operation')).toEqual({ state: 'not-in-snapshot' });
+  expect(view.lookupReference({ kind: 'batch', id: 'item-1-2' })).toEqual({ state: 'not-in-snapshot' });
+  expect(view.receipt('foreign-operation')).toEqual({ state: 'not-in-snapshot' });
   expect(Object.isFrozen(view)).toBe(true);
   expect(Object.isFrozen(view.lookupOperation('operation-0'))).toBe(true);
   input.operations[0]!.fingerprint = digest('different-request');
-  expect(view.lookupOperation('operation-0')?.acceptedAt).toBe(0);
+  expect(view.lookupOperation('operation-0')).toMatchObject({ state: 'found', operation: { acceptedAt: 0 } });
   await expect(store.publish(input as filesystem.SealedHistorySnapshot)).rejects.toMatchObject({ code: 'SEALED_HISTORY_CONFLICT' });
 });
 it('carries 6000 operation rows and 21000 exact native memberships without changing flags or hashes', async () => {
@@ -79,9 +80,9 @@ it('carries 6000 operation rows and 21000 exact native memberships without chang
   await store.publish(input);
   const view = await store.open();
   expect(view.counts).toEqual({ operations: 6000, references: 21000 });
-  for (let i = 0; i < 6000; i++) expect(view.lookupOperation(`operation-${i}`)).toEqual(input.operations[i]);
-  for (let i = 0; i < 6000; i++) for (let j = 0; j < 3; j++) expect(view.lookupReference({ kind: 'observation', id: `item-${i}-${j}` })).toEqual(input.operations[i]);
-  for (let i = 0; i < 3000; i++) expect(view.lookupReference({ kind: 'observation', id: `extra-${i}` })).toEqual(input.operations[i]);
+  for (let i = 0; i < 6000; i++) expect(view.lookupOperation(`operation-${i}`)).toEqual({ state: 'found', operation: input.operations[i] });
+  for (let i = 0; i < 6000; i++) for (let j = 0; j < 3; j++) expect(view.lookupReference({ kind: 'observation', id: `item-${i}-${j}` })).toEqual({ state: 'found', operation: input.operations[i] });
+  for (let i = 0; i < 3000; i++) expect(view.lookupReference({ kind: 'observation', id: `extra-${i}` })).toEqual({ state: 'found', operation: input.operations[i] });
 });
 it('uses a durable v2 marker rejected by the byte-identical real 0.9 reader, never adopts a v1 namespace', async () => {
   const f = await fixture(), store = active(f.options); await store.publish(snapshot());
@@ -93,6 +94,13 @@ it('uses a durable v2 marker rejected by the byte-identical real 0.9 reader, nev
   const metadataBefore = (await store.open()).lookupOperation('operation-0');
   const snapshotPath = join(f.directory, 'snapshots', JSON.parse(before.toString('utf8')).snapshot.sha256 + '.bin');
   const snapshotBefore = await readFile(snapshotPath);
+  const markerPath = join(f.directory, 'retention.sqlite'), markerBefore = await readFile(markerPath);
+  expect([...markerBefore.subarray(18, 20)]).toEqual([1, 1]);
+  const journalMode = () => {
+    const marker = new DatabaseSync(markerPath, { readOnly: true });
+    try { return marker.prepare('PRAGMA journal_mode').get()?.journal_mode; } finally { marker.close(); }
+  };
+  expect(journalMode()).toBe('delete');
   const script = `import {RepositoryLedger} from ${JSON.stringify(new URL('./fixtures/retained-reader-0.9/ledger.ts', import.meta.url).href)};
     try { new RepositoryLedger(${JSON.stringify(f.directory)},100).close(); process.exitCode=1; }
     catch(error) { process.stdout.write(JSON.stringify({code:error.code})); }`;
@@ -100,6 +108,10 @@ it('uses a durable v2 marker rejected by the byte-identical real 0.9 reader, nev
   expect(JSON.parse(child.stdout)).toEqual({ code: 'REPOSITORY_INVALID_OPTIONS' });
   expect(await readFile(join(f.directory, 'catalogue.json'))).toEqual(before);
   expect(await readFile(snapshotPath)).toEqual(snapshotBefore);
+  const markerAfter = await readFile(markerPath);
+  expect(markerAfter.equals(markerBefore)).toBe(false);
+  expect([...markerAfter.subarray(18, 20)]).toEqual([2, 2]);
+  expect(journalMode()).toBe('wal');
   const reopened = await store.open();
   expect(reopened.counts.operations).toBe(2);
   expect(reopened.lookupOperation('operation-0')).toEqual(metadataBefore);

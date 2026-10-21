@@ -446,3 +446,12 @@ per-namespace expiry, durable pending intents, reference indexing and retained
 expiry receipts. It is absent unless enabled with a host-selected retention
 period, uses a new managed namespace, and starts no cleanup loop. Existing
 repositories, raw archives and collection behavior are unchanged.
+
+## Optional sealed metadata snapshot
+
+The [sealed-history snapshot store](docs/SEALED_HISTORY.md) preserves exact expired
+operation metadata and reference ownership in a bounded binary representation.
+It is absent unless explicitly enabled in a new v2 namespace. This first slice
+is a metadata-only snapshot reader/publisher: hot/cold routing, admission,
+migration and actual repository compaction remain unimplemented. It starts no
+timer and adds no history TTL or activation.

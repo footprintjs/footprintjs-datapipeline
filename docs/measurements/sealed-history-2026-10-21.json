@@ -1,0 +1,250 @@
+{
+  "scope": "LOCAL SEED; exact terminal metadata snapshots only; no compaction or native cause replay",
+  "nodeVersion": "v24.21.0",
+  "codeHashes": [
+    {
+      "path": "examples/measure-sealed-history.ts",
+      "sha256": "49aeb03893f74f5247b91947008371c3369222c7d6b6f75893b171082646c165"
+    },
+    {
+      "path": "src/storage/filesystem.ts",
+      "sha256": "48a56f4a1ebe9f8165db5cb320e88171de41f71d23387a811db21540bef13ea9"
+    },
+    {
+      "path": "src/storage/filesystemRecords.ts",
+      "sha256": "8c152f7ad76964805fa3e81820fff80235337e4956660148c0344357841d2867"
+    },
+    {
+      "path": "src/storage/retainedRepository/commit.ts",
+      "sha256": "d7695fd3b65518b0d2e374d45b608ccca9a343cca9887a05662127a1cc615c4e"
+    },
+    {
+      "path": "src/storage/sealedHistory/catalogue.ts",
+      "sha256": "aadf3f677fe8177b2309b621ea51abda242ff359ca5a17c829232feae5774baa"
+    },
+    {
+      "path": "src/storage/sealedHistory/contracts.ts",
+      "sha256": "6d2e0dcf835341ee1324040d9bc844d91b08ec94c798eb7864ebc1a1f3eb8783"
+    },
+    {
+      "path": "src/storage/sealedHistory/decode.ts",
+      "sha256": "99d442df1a4ab257e9143a67b55da6081784af3787556c2a6898e5e2ebd20c34"
+    },
+    {
+      "path": "src/storage/sealedHistory/encode.ts",
+      "sha256": "bb27b1090aca27ef00bbfb8186b25562ffcf07eb67112aed38d0dce3613921b6"
+    },
+    {
+      "path": "src/storage/sealedHistory/files.ts",
+      "sha256": "e1fc3de15c6925dcd1e2d80bf1aa570cd5e4c5761b6973c9050ccb96e05d270e"
+    },
+    {
+      "path": "src/storage/sealedHistory/index.ts",
+      "sha256": "abbc42e1360b40b573355345c64b070fbec53458c43b7e0b8f8c67c69cda0351"
+    },
+    {
+      "path": "src/storage/sealedHistory/layout.ts",
+      "sha256": "fd2c7d2a6251c9af7e3f4f1c03bffd2a4d8baa4d9a39e25e89857c49bee20e9e"
+    },
+    {
+      "path": "src/storage/sealedHistory/namespace.ts",
+      "sha256": "414aaab90dad37bc11db2830ecaba16832e4e035be98bf32b4c490c82b7602b7"
+    },
+    {
+      "path": "src/storage/sealedHistory/publication.ts",
+      "sha256": "2c06c9c34e643a6222aa75b74fb16de7068be17e8a6fea72b3903e5332c487a0"
+    },
+    {
+      "path": "src/storage/sealedHistory/schema.ts",
+      "sha256": "a9fc5ae0d91969ae2a048505d663a6bf0b2ddbcb09ec1dab204d0db18039ff63"
+    },
+    {
+      "path": "src/validation.ts",
+      "sha256": "254cbaa1f5e0b4cbb40a1043633c624f46c9f0b19160d3e5bd2cc70611b78203"
+    }
+  ],
+  "inputs": {
+    "closedLedgersSha256": "c0c96e1099dcd70dc76bcc08f0cf005a05f519fa90a9ab2f45acc5be16e1cce5",
+    "publicIdentitiesSha256": "66e65811b5de62ae5978bb6efd866dde779fa8317b639641d33ff01e6c17324e"
+  },
+  "format": {
+    "headerBytes": 64,
+    "operationBytes": 115,
+    "referenceBytes": 36,
+    "footerBytes": 32,
+    "historyHorizon": null
+  },
+  "cases": [
+    {
+      "name": "client-poll-memory-default-20261021",
+      "namespaces": [
+        {
+          "namespace": "acquisition",
+          "originalBytes": 3014656,
+          "originalSha256": "37a847a1fa8827fd0b7e1a8d963067d8994815a54805a20cdd0dc10af26888c2",
+          "retentionMs": 60000,
+          "saved": {
+            "status": "stored",
+            "sha256": "c7ad510bbec9b78ae9659ba1bbfc267d00b691805af848440282a08c125403d1",
+            "bytes": 669096,
+            "operations": 3000,
+            "references": 9000
+          },
+          "operationChecks": 3000,
+          "referenceChecks": 9000,
+          "files": [
+            {
+              "name": "catalogue.json",
+              "bytes": 173,
+              "allocatedBytes": 4096
+            },
+            {
+              "name": "retention.sqlite",
+              "bytes": 32768,
+              "allocatedBytes": 32768
+            },
+            {
+              "name": "snapshots/c7ad510bbec9b78ae9659ba1bbfc267d00b691805af848440282a08c125403d1.bin",
+              "bytes": 669096,
+              "allocatedBytes": 671744
+            }
+          ],
+          "totalBytes": 702037,
+          "fileAllocatedBytes": 708608,
+          "markerPages": {
+            "page_size": 4096,
+            "page_count": 8,
+            "freelist_count": 0
+          }
+        },
+        {
+          "namespace": "compact",
+          "originalBytes": 3682304,
+          "originalSha256": "8c6719b21375343c8c80fd05c3fb2ab68bb7d5066691a8d8ee93aadb8dff956e",
+          "retentionMs": 120000,
+          "saved": {
+            "status": "stored",
+            "sha256": "a6ed127a14c1dd70aa855273f3476ef37ff8799189cf27dd06ef62840d9a3f15",
+            "bytes": 777096,
+            "operations": 3000,
+            "references": 12000
+          },
+          "operationChecks": 3000,
+          "referenceChecks": 12000,
+          "files": [
+            {
+              "name": "catalogue.json",
+              "bytes": 175,
+              "allocatedBytes": 4096
+            },
+            {
+              "name": "retention.sqlite",
+              "bytes": 32768,
+              "allocatedBytes": 32768
+            },
+            {
+              "name": "snapshots/a6ed127a14c1dd70aa855273f3476ef37ff8799189cf27dd06ef62840d9a3f15.bin",
+              "bytes": 777096,
+              "allocatedBytes": 778240
+            }
+          ],
+          "totalBytes": 810039,
+          "fileAllocatedBytes": 815104,
+          "markerPages": {
+            "page_size": 4096,
+            "page_count": 8,
+            "freelist_count": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "client-poll-memory-heap128-20261021",
+      "namespaces": [
+        {
+          "namespace": "acquisition",
+          "originalBytes": 3014656,
+          "originalSha256": "aa5222405029c2e43b7cd1787845132a03a2de25c9f7ab2025698cccdf74916a",
+          "retentionMs": 60000,
+          "saved": {
+            "status": "stored",
+            "sha256": "6f79befb64ec666169b4884d4936d3cd820355b733dda9411c5c15e4662bf371",
+            "bytes": 669096,
+            "operations": 3000,
+            "references": 9000
+          },
+          "operationChecks": 3000,
+          "referenceChecks": 9000,
+          "files": [
+            {
+              "name": "catalogue.json",
+              "bytes": 173,
+              "allocatedBytes": 4096
+            },
+            {
+              "name": "retention.sqlite",
+              "bytes": 32768,
+              "allocatedBytes": 32768
+            },
+            {
+              "name": "snapshots/6f79befb64ec666169b4884d4936d3cd820355b733dda9411c5c15e4662bf371.bin",
+              "bytes": 669096,
+              "allocatedBytes": 671744
+            }
+          ],
+          "totalBytes": 702037,
+          "fileAllocatedBytes": 708608,
+          "markerPages": {
+            "page_size": 4096,
+            "page_count": 8,
+            "freelist_count": 0
+          }
+        },
+        {
+          "namespace": "compact",
+          "originalBytes": 3682304,
+          "originalSha256": "bdfa107ecbed04dcf1919d84e7341888773e8588284d613bd2c650befb731ff5",
+          "retentionMs": 120000,
+          "saved": {
+            "status": "stored",
+            "sha256": "340b9d30ba2af576cc8ba11ce65c242ef9d877a4faa02fde8ee68c4947adebb3",
+            "bytes": 777096,
+            "operations": 3000,
+            "references": 12000
+          },
+          "operationChecks": 3000,
+          "referenceChecks": 12000,
+          "files": [
+            {
+              "name": "catalogue.json",
+              "bytes": 175,
+              "allocatedBytes": 4096
+            },
+            {
+              "name": "retention.sqlite",
+              "bytes": 32768,
+              "allocatedBytes": 32768
+            },
+            {
+              "name": "snapshots/340b9d30ba2af576cc8ba11ce65c242ef9d877a4faa02fde8ee68c4947adebb3.bin",
+              "bytes": 777096,
+              "allocatedBytes": 778240
+            }
+          ],
+          "totalBytes": 810039,
+          "fileAllocatedBytes": 815104,
+          "markerPages": {
+            "page_size": 4096,
+            "page_count": 8,
+            "freelist_count": 0
+          }
+        }
+      ]
+    }
+  ],
+  "exclusions": [
+    "No source payloads or native traces recovered",
+    "No hot routing, migration or deletion",
+    "No fleet capacity or storage rate measured"
+  ]
+}

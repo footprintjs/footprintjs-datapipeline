@@ -19,12 +19,17 @@ It adds no graph, walker, database, scheduler, source discovery or automatic ret
 | Named resolve/apply/prepare/publish steps | `src/flows/derive.ts` |
 | Native per-write and decision evidence | `runWindowFlow`, documented in `README.md` |
 | Typed Influx points and uncertain delivery | `/influxdb`; no automatic retry or record persistence inside the sink |
-| Application journal and save-before-send | Neo `performanceWriter/`; integration described in `docs/INFLUXDB_HOST_RECEIPTS.md` |
+| Repository-backed event facade and save-before-send | Neo `performanceWriter/WriterJournal`; ordinary repository records, not a second durable store |
 | Packing, compression and explicit expiry | Existing repository and trace stores; no ancestor pinning |
 
 The immediate limitation is Neo's facade: `performanceWriter/contracts.ts` takes one capture,
 and `performanceWriter/transform.ts` assigns every point only that capture's `inputRefs`.
 Generic `derive()` already accepts several batches. Extending the facade must not duplicate it.
+
+First adopt the shared [attempt/intent ownership decision](2026-10-operation-ownership.md).
+The existing repository/pipeline port is the one owner. #21 drops its proposed fleet journal
+and cursor; this design reuses the same host-event save/lookup pattern already wrapped by
+Neo's writer. No writer- or fleet-specific database may override committed repository facts.
 
 ## Options and recommendation
 
@@ -36,8 +41,10 @@ Generic `derive()` already accepts several batches. Extending the facade must no
 Use an opt-in composition around existing contracts, first proven as an adapter integration.
 A manifest describes roles and membership; it does not contain copied response bodies.
 Role names, compatibility rules, required claims and vendor meanings belong to the adapter.
-The first implementation should export no new writer engine. Promote a small generic helper
-only after the integration identifies behavior that another adapter can use unchanged.
+The first implementation should export no new writer engine. One library rule must come first:
+opt-in core input classification/window admission, so an adapter cannot accidentally include
+out-of-window measurements. That is a bounded addition to existing `derive`, not another join
+engine. Other generic writer helpers wait until a second adapter can reuse them unchanged.
 
 ## Types-only sketch
 
@@ -47,6 +54,7 @@ JSON and shared requirement types; do not create another reason-code list.
 ```ts
 interface SavedInputMember {
   readonly role: string;                 // fixed, adapter-declared role
+  readonly inputClass: 'measurement' | 'reference';
   readonly batchRef: BatchRef;
   readonly observationRefs: readonly ObservationRef[];
   readonly learnedAt: string;            // host-recorded knowledge time
@@ -55,8 +63,8 @@ interface SavedInputManifest {
   readonly schemaVersion: 1;
   readonly policyRef: VersionedRef;
   readonly knowledgeCutoff: string;
-  readonly targetWindow: DeriveWindow;   // what the answer is about
-  readonly readWindow: DeriveWindow;     // what existing derive() may load
+  readonly targetWindow: DeriveWindow;   // must equal DeriveRequest.window
+  readonly referenceWindow: DeriveWindow; // bounded lookup read envelope
   readonly members: readonly SavedInputMember[];
   readonly gapRefs: readonly ObservationRef[]; // saved requirement/attempt facts
 }
@@ -70,6 +78,12 @@ interface MultiInputAssessmentRequest {
   readonly manifest: SavedInputManifest; // supplied through existing request JSON
   readonly assessmentRef: VersionedRef;
 }
+interface ProposedInputSelection {
+  readonly members: readonly SavedInputMember[];
+  readonly referenceWindow: DeriveWindow;
+}
+// Proposed opt-in field on DeriveRequest, not a current callable API:
+// inputSelection?: ProposedInputSelection
 ```
 
 The manifest is persisted in ordinary versioned observations/evidence, not a new store.
@@ -90,20 +104,56 @@ Hashes establish content consistency; they do not authenticate a source or grant
 
 Limits must be explicit and validated before expanding input lists. Reuse the core candidate
 limits, repository chunk limit and native record ceiling; add only admission limits they lack.
-The default core ceiling is 10,000 output observations / 8 MiB of candidate JSON; it does not
-by itself bound total loaded input bytes or input batch count. Budget these separately.
+The current default core ceiling is 10,000 output observations / 8 MiB of candidate JSON;
+it does not by itself bound request JSON, loaded input bytes or input batch count.
+Budget these separately; do not claim those guards already exist.
 Do not copy the native-record ceiling into a claim that all input allocations fit in memory.
 Over-limit input records a fixed gap/refusal, never a silently retained prefix.
 
-Existing `derive()` filters every observation against one half-open window before the transform.
-An older valid lookup would disappear if that window were just the target measurement window.
-For the first integration, use an explicit collection-clock `readWindow` spanning the admitted
-members; keep the target's source/window semantics in the manifest and adapter decisions.
-The transform must reject unexpected members and independently select which facts apply.
-Only measurements inside the target window contribute numbers; the broader read envelope
-exists to admit lookup evidence, never to widen the statistic accidentally.
-A wide read window does not make old mappings fresh or prove continuous topology coverage.
-Do not manufacture a new source timestamp merely to bypass existing window selection.
+### One owner for the measurement boundary
+
+Keep `DeriveRequest.window` as the target measurement window. **Do not widen it and ask every
+adapter to filter numbers back down.** The proposed opt-in `inputSelection` declares saved
+members as measurement or reference inputs and a separate bounded reference read envelope.
+Its manifest must agree exactly with the request's batch refs, roles, classes and windows.
+
+The core validates every classification against immutable transform-registered source/schema
+role rules; callers cannot relabel a latency measurement as a reference to bypass the window.
+Reject duplicates, conflicting classes, unknown roles/schemas and foreign refs before calling
+the transform. For admitted members, core applies the target half-open window to measurement
+observations and the reference envelope to lookup observations, on their explicit clocks.
+Unselected observations never reach `Transform.apply` or its allowed output-support set.
+Preserve input order and record exclusions/coverage; an excluded measurement adds no number.
+In this opt-in path require exact admitted observation support for each output. A whole-batch
+reference or implicit all-batches support cannot reintroduce rows that the core excluded;
+refuse those broader claims rather than weakening the window boundary. Existing legacy
+batch-level lineage keeps its current behavior outside this opt-in path.
+
+This reuses existing point/interval rules: unknown source time is excluded and a straddling
+interval is not split or weighted. The core operates on standard observation timestamps;
+an adapter still validates any domain timestamps hidden inside a raw response payload.
+Reference admission does not make a mapping fresh or prove continuous validity. The adapter's
+named decisions still check actual validity, knowledge time, compatibility and required claims.
+Never manufacture a newer timestamp to make an old fact pass.
+
+Without this opt-in field, existing derive selection/fingerprints remain unchanged. Its
+implementation and library mutation tests must land before the new writer facade uses it.
+There is no per-adapter fallback to the earlier broad-window/filter-it-yourself proposal.
+
+### Manifest bytes belong to the operation budget
+
+`maxManifestBytes` is an additional cap, not a second free allowance. For this opt-in path,
+measure canonical UTF-8 request JSON (including the manifest, selection and wrappers) before
+fingerprinting/cloning/dispatch, then reserve those bytes against the operation's `maxBytes`.
+Validate candidate JSON against the remaining budget: `requestBytes + candidateBytes <= maxBytes`.
+Any manifest copy in a candidate counts again because it is actually stored again. A future
+reference-only request can avoid that copy; it must not silently drop this accounting.
+
+Count/ref/string bounds must be checked before expanding lists, not after an unbounded clone.
+Loaded-input bytes and native record size keep their independent caps. Their safety is not
+proved merely by this serialized budget. Overflow fails before derivation/sink dispatch and
+records a bounded refusal through the same repository event port. Legacy non-opt-in request
+and candidate limits retain their existing behavior.
 
 `knowledgeCutoff` limits learned information separately from domain validity time.
 The host must supply trustworthy recorded knowledge times; a caller-provided timestamp is
@@ -124,8 +174,10 @@ save run start and attempts -> save each admitted response / supplied-lookup fac
   -> save attempt result and independent trace outcome
 ```
 
-Use ordinary collect/derive operations for those facts and the existing writer journal for
-run and attempt identities. Their source is explicitly a host event where appropriate.
+Use ordinary collect/derive operations through the shared repository event/reconciliation
+port. The existing writer journal becomes its product facade, not another durable owner or
+attempt database. Keep current versioned run/stage/attempt identities and old records readable.
+Their source is explicitly a host event where appropriate.
 Such an event records what the host supplied, not authentication of a remote response.
 Keep the generic manifest tied to acknowledged operations; a caller's arbitrary reference
 does not establish that a response was published or admitted.
@@ -196,8 +248,15 @@ Use fixed codes; permission-denied facts themselves must be safe for that reader
   refuses foreign references and conservatively reports input coverage; reuse existing tests.
 - Test manifest size/count/loaded-byte limits, duplicates, wrong schema, altered references,
   unknown knowledge time and post-cutoff facts. Every refusal must prevent sink dispatch.
-- Test older lookups inside the explicit read envelope but outside the target window,
-  plus stale/ambiguous/partial lookup decisions. A raw zero stays zero; a gap adds no number.
+- A **library** test puts a measurement before the target and one exactly at its exclusive
+  end beside an older valid reference. Neither measurement reaches the transform or changes
+  its numbers; the reference remains available. Reject a measurement schema labelled as a
+  reference. Removing the core class/window guard must fail these tests, even if the test
+  transform simply sums everything it receives. Legacy non-opt-in behavior remains pinned.
+- Test combined request/manifest/candidate bytes at and one byte over the same operation
+  ceiling, including a request that would fit `maxManifestBytes` alone. Disabling subtraction
+  must fail. Refuse before transform/sink work and do not increase existing ceilings.
+- Test stale/ambiguous/partial reference decisions. A raw zero stays zero; a gap adds no number.
 - Replay the same manifest and cutoff; compare saved fingerprints and cause answers.
   Introduce late information under a new identity and prove the old assessment is unchanged.
 - Heat parity uses the real isolated Python oracle and synthetic saved responses. Add
@@ -210,8 +269,12 @@ Use fixed codes; permission-denied facts themselves must be safe for that reader
 - Inject failures before/after intent and dispatch; retain uncertain delivery without retries.
   Measure maximum-case record bytes, loaded memory and time; do not raise limits to hide a failure.
 
-First PR after design approval: saved-input manifest admission and a synthetic two-input
-transform, with native cause and save-before-send tests; no live reader or generic writer loop.
+First settle the shared owner with #21. The first library PR after approval adds opt-in
+class/window admission and combined operation-size tests using synthetic saved inputs;
+no heat writer, live reader, new journal or generic writer loop. Then prove saved-input manifest
+admission, native cause and save-before-send in the product facade through that same event port.
 Then adapt one inactive heat path in Neo, preserving every existing profile when opted out.
 Production bounds, retention, disk budgets, watch lists and deployment require separate
 host decisions and measurements. This document settles none of them and switches on nothing.
+Bounded ownership/expiry bookkeeping is also a pre-activation gate; payload expiry alone
+does not bound it. Neither design adds another attempt store to work around that growth.

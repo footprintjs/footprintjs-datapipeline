@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { execFile } from 'node:child_process';
@@ -101,6 +101,9 @@ it('uses a durable v2 marker rejected by the byte-identical real 0.9 reader, nev
     try { return marker.prepare('PRAGMA journal_mode').get()?.journal_mode; } finally { marker.close(); }
   };
   expect(journalMode()).toBe('delete');
+  await chmod(f.directory, 0o500);
+  try { expect((await store.open()).counts).toEqual({ operations: 2, references: 6 }); }
+  finally { await chmod(f.directory, 0o700); }
   const script = `import {RepositoryLedger} from ${JSON.stringify(new URL('./fixtures/retained-reader-0.9/ledger.ts', import.meta.url).href)};
     try { new RepositoryLedger(${JSON.stringify(f.directory)},100).close(); process.exitCode=1; }
     catch(error) { process.stdout.write(JSON.stringify({code:error.code})); }`;
@@ -111,10 +114,17 @@ it('uses a durable v2 marker rejected by the byte-identical real 0.9 reader, nev
   const markerAfter = await readFile(markerPath);
   expect(markerAfter.equals(markerBefore)).toBe(false);
   expect([...markerAfter.subarray(18, 20)]).toEqual([2, 2]);
-  expect(journalMode()).toBe('wal');
+  expect((await readdir(f.directory)).filter(name => /^retention\.sqlite-(wal|shm)$/.test(name))).toEqual([]);
   const reopened = await store.open();
   expect(reopened.counts.operations).toBe(2);
   expect(reopened.lookupOperation('operation-0')).toEqual(metadataBefore);
+  expect((await readdir(f.directory)).filter(name => /^retention\.sqlite-(wal|shm)$/.test(name)).sort()).toEqual(['retention.sqlite-shm', 'retention.sqlite-wal']);
+  expect(journalMode()).toBe('wal');
+  await rm(markerPath + '-wal'); await rm(markerPath + '-shm'); await chmod(f.directory, 0o500);
+  try { await expect(store.open()).rejects.toMatchObject({ code: 'SEALED_HISTORY_UNAVAILABLE', message: 'Sealed history operation was refused.' }); }
+  finally { await chmod(f.directory, 0o700); }
+  expect(await readFile(markerPath)).toEqual(markerAfter);
+  expect(await readFile(snapshotPath)).toEqual(snapshotBefore);
   const g = await fixture(), legacy = createRetainedFilesystemRepository({ ...g.options, onHealth() {} })!;
   await legacy.findOperation('initialize-only'); legacy.close();
   await expect(active(g.options).publish(snapshot())).rejects.toMatchObject({ code: 'SEALED_HISTORY_UNMANAGED' });

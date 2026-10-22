@@ -17,7 +17,10 @@ export function fail(code: SealedHistoryCode): never { throw new SealedHistoryEr
 export const MAX_SEALED_HISTORY_BYTES = 16 * 1024 * 1024;
 export interface SealedHistoryOptions {
   readonly enabled?: boolean;
-  /** An existing, empty, private directory on a local POSIX filesystem. */
+  /**
+   * An existing, empty, private directory on a local POSIX filesystem.
+   * All publishers of one namespace must share one host and PID namespace.
+   */
   readonly directory: string;
   /** Original payload expiry interval; this is not a history retention period. */
   readonly retentionMs: number;
@@ -60,6 +63,9 @@ export interface SealedHistoryView {
 export interface SealedFilesystemHistory {
   /** One immutable selected snapshot; not migration, compaction or admission. */
   publish(snapshot: SealedHistorySnapshot): Promise<SealedHistoryPublication>;
-  /** Revalidates the saved files; the returned metadata view is detached. */
+  /**
+   * Revalidates saved files without reclaiming stages; the view is detached.
+   * SQLite may create sidecars for a WAL marker; read-only mounts are not guaranteed.
+   */
   open(): Promise<SealedHistoryView>;
 }

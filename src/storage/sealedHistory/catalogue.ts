@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import { fail, type SealedHistoryPublication } from './contracts.js';
 import { decodeHistory, type DecodedHistory } from './decode.js';
-import { missing, privateDirectory, readBounded } from './files.js';
+import { privateDirectory, readBounded } from './files.js';
+import { missing } from './classify.js';
 import { hash, isHash } from './layout.js';
 
 export interface Catalogue {

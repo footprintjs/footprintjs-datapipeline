@@ -13,6 +13,9 @@ It starts no timer, owns no collector and is not a `Repository` replacement.
 
 An enabled store requires an existing empty private directory, an explicit
 `retentionMs`, and a local POSIX filesystem with working hard links and `fsync`.
+Every publisher of one namespace must share one host and one PID namespace:
+stage reclamation uses that shared PID view. Readers never probe publisher PIDs
+or reclaim stages and may have a different PID view.
 It refuses the filesystem root, symlinks and group/world-accessible storage.
 A separate filesystem is required unless the host explicitly sets
 `requireSeparateFilesystem: false`, as the offline tests do.
@@ -101,12 +104,20 @@ rather than proof of no write. An identical retry verifies and synchronizes save
 metadata; it does not replace an existing selected snapshot.
 
 Marker creation uses a private `.staging/marker-<pid>-<uuid>/` directory on the
-same filesystem. While no marker exists, a check clears only recognized marker
-files and SQLite journals belonging to dead publishers. Live or reused PIDs keep
-their staging files. Unknown names, links, owners and permissions are refused;
-cleanup never recursively removes arbitrary contents. Tests use actual child
-SIGKILLs at sampled initialization boundaries and varied publication delays,
-and keep two live publishers' marker stages separate.
+same filesystem. While no marker exists, `publish()` reclaims only recognized
+marker files and SQLite journals belonging to dead publishers. `open()` checks
+stage metadata without deleting files or checking PID liveness. Live or reused
+PIDs keep their staging files. Unknown names, links, owners and permissions are
+refused; cleanup never recursively removes arbitrary contents. Once a valid
+marker exists, `.staging` is not examined again, so any remaining marker stages
+are retained.
+
+Tests use actual child SIGKILLs after marker linking, snapshot stage writing,
+snapshot linking and catalogue linking, and during a test-held SQLite transaction
+with a real journal. They check the leftover kinds and successful retries.
+Committed-statement checkpoints and varied early-publication kill delays are
+separate checks. Live publishers' stages remain separate, and a reader whose PID
+view cannot see a live publisher leaves its stage intact.
 
 Interrupted `.stage-*` snapshot/catalogue files and a losing publisher's `.bin`
 file are **never automatically removed**. The 16 MiB ceiling bounds only the
@@ -130,13 +141,31 @@ byte-identical, hash-pinned 0.9 source in a child process, assert that marker si
 effect, then reopen and verify unchanged catalogue/snapshot bytes and metadata.
 Extra schema or guard content is refused.
 
+A subsequent `open()` of that WAL marker can create and retain
+`retention.sqlite-wal` and `retention.sqlite-shm`, even with SQLite's
+`readOnly: true`. Without those sidecars, a namespace mounted read-only or set to
+mode 0500 can return `SEALED_HISTORY_UNAVAILABLE` after the old-reader probe
+(SQLite read-only error 1544), while the original DELETE marker opens there.
+Tests pin both effects and unchanged published bytes. **Read-only mount support
+is not guaranteed after this WAL switch.** A future namespace hard cap must
+count the sidecars as well as snapshots and leftovers.
+
+The [Node 22.13 engine-floor API](https://nodejs.org/download/release/v22.13.0/docs/api/sqlite.html#new-databasesynclocation-options)
+accepts only string SQLite locations; its [SQLite connection](https://github.com/nodejs/node/blob/v22.13.0/src/node_sqlite.cc#L257-L268)
+does not enable SQLite URI handling. The immutable-URL alternative is therefore
+unavailable at this floor.
+This implementation keeps the existing read-only connection and SQLite locking:
+a busy marker still reads as unavailable. It does not bypass that check by
+treating the marker as immutable.
+
 This is a constructor gate, **not fencing for already-open old handles**. A plain
 `FilesystemRepository` does not inspect this marker and is unsupported for v2.
 There is no in-place rollout or production activation in this change.
 
 ## Offline implementation measurement
 
-The historical [recorded report](measurements/sealed-history-2026-10-21.json)
+The historical [recorded report](measurements/sealed-history-2026-10-21.json),
+produced by [e00a6a2c](https://github.com/footprintjs/footprintjs-datapipeline/commit/e00a6a2c99d2a612bf7cea9ef23b112a6f70b4a0),
 records replays of two closed synthetic 3,000-poll diagnostics. For **each** case,
 it records exact matches for all 6,000 operation metadata rows and 21,000 native
 reference memberships, with input hashes checked before and after replay. The

@@ -6,7 +6,8 @@ import { readCatalogue } from './catalogue.js';
 import { MAX_SEALED_HISTORY_BYTES, SealedHistoryError, fail, type SealedFilesystemHistory, type SealedHistoryLookup, type SealedHistoryOperation, type SealedHistoryOptions, type SealedHistorySnapshot, type SealedHistoryView } from './contracts.js';
 import { encodeHistory } from './encode.js';
 import { decodeHistory, type DecodedHistory } from './decode.js';
-import { accessDenied, rootDirectory } from './files.js';
+import { rootDirectory } from './files.js';
+import { classifyReadError } from './classify.js';
 import { checkNamespace, initializeNamespace } from './namespace.js';
 import { publishSnapshot } from './publication.js';
 
@@ -66,8 +67,7 @@ export function createSealedFilesystemHistory(options: SealedHistoryOptions): Se
         if (!loaded) fail('SEALED_HISTORY_UNAVAILABLE');
         return view(loaded.decoded);
       } catch (error) {
-        if (error instanceof SealedHistoryError) throw error;
-        return fail(accessDenied(error) ? 'SEALED_HISTORY_UNMANAGED' : 'SEALED_HISTORY_UNAVAILABLE');
+        return fail(classifyReadError(error));
       }
     },
   });

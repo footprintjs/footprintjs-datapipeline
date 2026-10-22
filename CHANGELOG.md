@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Optional exact sealed metadata snapshots for new v2 filesystem namespaces: bounded binary decoding, native operation/reference lookups, preserved expiry receipts and crash-safe immutable snapshot publication. Existing retained repositories are unchanged. Hot/cold routing, admission, migration and compaction remain unimplemented; no history TTL, retirement or activation is added.
+
 ## [0.9.0] - 2026-10-21
 
 ### Added

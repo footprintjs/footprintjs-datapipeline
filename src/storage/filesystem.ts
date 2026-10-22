@@ -360,5 +360,8 @@ export function createFilesystemTraceStore(options: FilesystemTraceOptions): Fil
 export { createGuardedFilesystemTraceStore, GuardedFilesystemTraceStore, TraceStorageError, TRACE_RETENTION_MS } from './guardedTrace/index.js';
 export type { GuardedTraceOptions, TraceStorageHealth, TraceStorageReceipt, TraceStorageGapReceipt, TraceStorageCode } from './guardedTrace/index.js';
 
+export { createSealedFilesystemHistory, SealedHistoryError, MAX_SEALED_HISTORY_BYTES } from './sealedHistory/index.js';
+export type { SealedFilesystemHistory, SealedHistoryOptions, SealedHistoryOperation, SealedHistorySnapshot, SealedHistoryPublication, SealedHistoryView, SealedHistoryLookup, SealedHistoryReceiptLookup, SealedHistoryCode } from './sealedHistory/index.js';
+
 export { createRetainedFilesystemRepository, RetainedFilesystemRepository, RepositoryRetentionError } from './retainedRepository/index.js';
 export type { RetainedRepositoryOptions, RepositoryRetentionReceipt, RepositoryRetentionCode } from './retainedRepository/index.js';

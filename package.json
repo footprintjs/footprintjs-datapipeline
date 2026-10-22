@@ -46,7 +46,8 @@
     "docs/POWERSCALE_STORAGE_MEASUREMENT.md",
     "docs/measurements",
     "docs/PACKED_REPOSITORY.md",
-    "docs/REPOSITORY_RETENTION.md"
+    "docs/REPOSITORY_RETENTION.md",
+    "docs/SEALED_HISTORY.md"
   ],
   "sideEffects": false,
   "scripts": {

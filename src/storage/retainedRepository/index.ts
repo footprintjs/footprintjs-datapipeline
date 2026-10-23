@@ -11,6 +11,8 @@ import { readOwned } from './readOwned.js';
 import { prepareIntent, snapshotWrite, operationHash } from './commit.js';
 import { removeOperation } from './cleanup.js';
 import { admitTransaction } from './admission.js';
+import { setImmediate as yieldTurn } from 'node:timers/promises';
+import { storageFailure } from './failure.js';
 export * from './contracts.js';
 /** Explicit, packed, managed namespace. No timer, automatic resend or legacy adoption. */
 export class RetainedFilesystemRepository implements Repository {
@@ -20,6 +22,7 @@ export class RetainedFilesystemRepository implements Repository {
   private readonly serial = new RepositorySerial();
   private readonly reads = new RepositoryReadBatcher(refs => this.readMany(refs));
   private publishing?: string;
+  private cleanupRunning = false;
   constructor(private readonly options: RetainedRepositoryOptions) { checkOptions(options); this.options = Object.freeze({ ...options }); }
   private fresh = (row: Row): void => {
     const now = time(this.options);
@@ -38,14 +41,7 @@ export class RetainedFilesystemRepository implements Repository {
   }
   private async exclusive<T>(fn: () => Promise<T>): Promise<T> {
     try { return await this.serial.run(() => this.transaction(fn)); }
-    catch (error) {
-      const code = error instanceof RepositoryRetentionError || error instanceof FilesystemRepositoryError ? error.code : undefined;
-      if (code === 'REPOSITORY_BUSY' || code === 'REPOSITORY_CLOCK_UNAVAILABLE' || code === 'REPOSITORY_UNCONFIRMED' || code === 'storage_corrupt') {
-        try { void Promise.resolve(this.options.onHealth({ code: code === 'storage_corrupt' ? 'REPOSITORY_UNCONFIRMED' : code })).catch(() => {}); }
-        catch { /* An independent health sink cannot change a storage outcome. */ }
-      }
-      throw error;
-    }
+    catch (error) { return storageFailure(this.options, error); }
   }
   private async transaction<T>(fn: () => Promise<T>): Promise<T> {
     let begun = false;
@@ -95,15 +91,25 @@ export class RetainedFilesystemRepository implements Repository {
   }
   async sweep(options: { limit: number }): Promise<{ deleted: number }> {
     if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
-    const rows = await this.exclusive(async () => this.ledger!.candidates(time(this.options), options.limit));
-    let deleted = 0;
-    for (const row of rows) {
-      await this.exclusive(async () => this.ledger!.expired(row.operationHash)); // durable before unlink
-      await this.exclusive(async () => { await removeOperation(this.path!, row.operationHash); this.ledger!.deleted(row.operationHash); deleted++; });
-    }
-    return { deleted };
+    if (this.cleanupRunning) return storageFailure(this.options, new RepositoryRetentionError('REPOSITORY_BUSY'));
+    this.cleanupRunning = true;
+    try {
+      const rows = await this.exclusive(async () => this.ledger!.candidates(time(this.options), options.limit));
+      let deleted = 0;
+      for (const row of rows) {
+        await this.exclusive(async () => this.ledger!.expired(row.operationHash)); // durable before unlink
+        // Expired identities cannot publish again. Unlink/fsync needs no database
+        // lock; a crash here leaves dataDeleted=false for explicit reconciliation.
+        try { await removeOperation(this.path!, row.operationHash); }
+        catch (error) { return storageFailure(this.options, error); }
+        await this.exclusive(async () => this.ledger!.deleted(row.operationHash));
+        deleted++;
+        await yieldTurn();
+      }
+      return { deleted };
+    } finally { this.cleanupRunning = false; }
   }
-  close(): void { if (this.serial.pending || this.reads.busy) throw new RepositoryRetentionError('REPOSITORY_BUSY'); this.ledger?.close(); delete this.ledger; delete this.data; }
+  close(): void { if (this.cleanupRunning || this.serial.pending || this.reads.busy) throw new RepositoryRetentionError('REPOSITORY_BUSY'); this.ledger?.close(); delete this.ledger; delete this.data; }
 }
 export function createRetainedFilesystemRepository(options: RetainedRepositoryOptions): RetainedFilesystemRepository | undefined {
   if (options.enabled !== true) return undefined;

@@ -31,6 +31,12 @@ The existing repository/pipeline port is the one owner. #21 drops its proposed f
 and cursor; this design reuses the same host-event save/lookup pattern already wrapped by
 Neo's writer. No writer- or fleet-specific database may override committed repository facts.
 
+The shared decision also gates this facade on real store admission under
+cleanup contention (#25, unmerged/unreleased). A refused manifest or send-intent
+save emits independent health and blocks dispatch; it never moves the same
+attempt to a private writer journal. Request/manifest bytes and target-window
+selection remain core-owned rules, tested before any adapter may use them.
+
 ## Options and recommendation
 
 1. Put all lookups in writer configuration. Smallest code change, but the lookup remains

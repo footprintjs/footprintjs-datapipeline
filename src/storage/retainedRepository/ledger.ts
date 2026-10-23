@@ -5,6 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { RepositoryRetentionError, type RepositoryRetentionReceipt, type RetainedRepositoryOptions } from './contracts.js';
 import { ElapsedAge } from './elapsedAge.js';
 import { clockFence } from './clockFence.js';
+import { admitTransaction } from './admission.js';
 export interface Row extends RepositoryRetentionReceipt { fingerprint: string; writeHash: string }
 function isBusy(error: unknown): boolean {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return false;
@@ -63,8 +64,20 @@ export class RepositoryLedger {
       throw error;
     }
   }
-  commit(): void { this.age?.checkpoint(); this.db.exec('COMMIT'); }
-  rollback(): void { this.db.exec('ROLLBACK'); }
+  async commit(): Promise<void> {
+    this.age?.checkpoint();
+    // DELETE-journal readers can block COMMIT after BEGIN IMMEDIATE succeeded.
+    // SQLITE_BUSY leaves this transaction open. Retry only COMMIT, once the
+    // checkpoint and all native publication/cleanup effects have already run.
+    await admitTransaction(() => {
+      try { this.db.exec('COMMIT'); }
+      catch (error) {
+        if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+        throw error;
+      }
+    });
+  }
+  rollback(): void { if (this.db.isTransaction) this.db.exec('ROLLBACK'); }
   row(hash: string): Row | undefined {
     const row = this.db.prepare('SELECT * FROM operations WHERE operationHash=?').get(hash);
     if (!row) return undefined;

@@ -47,14 +47,17 @@ export class RetainedFilesystemRepository implements Repository {
     let begun = false;
     try {
       await admitTransaction(async () => { await this.ready(); this.ledger!.begin(); }); begun = true;
-      const result = await fn(); this.ledger!.commit(); begun = false; return result;
+      const result = await fn(); await this.ledger!.commit(); begun = false; return result;
     } catch (error) {
       let failure = error;
       if (begun) {
         try {
-          if (error instanceof RepositoryRetentionError && error.code === 'REPOSITORY_EXPIRED') this.ledger!.commit();
+          if (error instanceof RepositoryRetentionError && error.code === 'REPOSITORY_EXPIRED') await this.ledger!.commit();
           else this.ledger!.rollback();
-        } catch { failure = new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); }
+        } catch (commitError) {
+          failure = commitError instanceof RepositoryRetentionError ? commitError : new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
+          try { this.ledger!.rollback(); } catch { failure = new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); }
+        }
       }
       const safe = failure instanceof RepositoryRetentionError || failure instanceof FilesystemRepositoryError ? failure : new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
       throw safe;

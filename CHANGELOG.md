@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Retry a busy final SQLite COMMIT asynchronously, including verified-uptime
+  expiry and deletion acknowledgements. Checkpoints and publication are not
+  replayed; exhausted locks keep their fixed busy diagnostic.
+
 - Optional verified-uptime expiry for new retained namespaces. A persisted
   elapsed-age checkpoint prevents wall-clock corrections and unobserved restart
   downtime from expiring data early. Legacy readers are fenced; existing data

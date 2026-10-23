@@ -4,6 +4,11 @@ Draft integration contract, types only. This is the missing growth work for #27,
 not code, a chosen history horizon, or a production policy. Hard caps remain a
 last resort; they do not reclaim capacity and must not be presented as readiness.
 
+**Review gate:** sealing alone still grows forever. The reviewer estimates
+about 106 MB/day at the application's rate, not a measured runtime result. This
+draft cannot become ready until finite period retirement is implemented and
+measured; smaller cold rows alone do not close that gate.
+
 ## Reuse and ownership
 
 The retained repository's existing control ledger remains the sole authority for
@@ -12,6 +17,14 @@ second metadata database. Reuse #24's bounded, exact binary codec as an internal
 shared component after its format/read redesign is settled; do not publish or
 depend on its standalone snapshot constructor. Extend the codec version to keep
 #26's elapsed-age fields exactly. Existing values, IDs and receipts are not rewritten.
+
+The host's existing, separately scheduled cleanup worker is the sole sealer and
+period-retirement owner for a namespace. Readers and pollers never start sealing.
+One namespace maintenance lease, with the current generation checked in the
+same control ledger, prevents two cleanup processes from publishing competing
+catalogues. The worker releases database transactions before chunk I/O and
+yields between bounded units. A restart reconciles the same generation; it does
+not create a second journal or take over a running owner's lease automatically.
 
 ```ts
 // Illustrative internal types, no exports or runnable configuration.
@@ -69,12 +82,41 @@ periods or loading the entire history is not a production solution. Counts must
 include both tiers. #27's `max(rowid)` shortcut is valid only while ownership
 tables are append-only and **must be replaced** before hot-row deletion.
 
-Sealing reduces representation cost, but exact membership still grows. A finite
-byte cap will eventually stop work unless a separately reviewed period-retirement
-rule can retire old identities without admitting them again. That rule needs a
-versioned period identity/fence and honest "history unavailable" answers; it must
-not invent per-record deletion proof after membership is forgotten. No horizon,
-permission to forget IDs, or change to existing lookup meaning is selected here.
+## Required finite history rule
+
+The new period-aware namespace must require a finite `historyPeriods` host policy;
+there is no unlimited setting or inferred default. For local development on a
+personal laptop, the proposed profile keeps **seven 24-hour verified-age periods**
+of synthetic data and exact history, under an explicit disk budget. That is a
+development recommendation, not permission to delete existing files or start
+cleanup. Production's exact-history duration still needs an explicit host choice;
+it is separate from the 30-day raw/trace policy. No retirement runs under today's
+namespace format.
+
+Age is verified elapsed age from #26, not a civil-calendar jump. A period retires
+only after its closing age plus the entire kept-history duration, and only when
+every member is confirmed deleted and all pending work has drained. Unknown
+downtime can delay retirement, never accelerate it. Window boundaries and the
+duration are immutable namespace policy; changing them requires migration review.
+
+Before dropping membership, the same ledger atomically advances a durable retired
+period prefix. Operation and reference IDs in this new format must carry their
+namespace instance and acceptance period, so the prefix permanently refuses old
+IDs even after exact membership is gone. Stale retries cannot remint themselves
+into the current period. Legacy opaque IDs cannot use this rule: their old store
+keeps exact history unless the entire namespace is permanently retired and fenced.
+
+Within kept periods, exact deleted/unknown lookup semantics remain. Below the
+retired prefix, every lookup returns **history unavailable**, whether that ID
+existed or not. It never asserts an individual deletion after its receipt is
+forgotten. Fixed-size checkpoint generations replace retired per-period lists;
+backups require the latest trusted fence. The complete identity, retirement and
+backup contract is in the existing period-retirement design; no delete-by-age
+shortcut may be added to the current ledger.
+
+Sealing, the period prefix and physical reclamation must all be implemented and
+tested together to claim bounded growth. Required proof includes many full history
+cycles with allocated bytes reaching a plateau, while older IDs stay refused.
 
 ## Proof required before runtime adoption
 

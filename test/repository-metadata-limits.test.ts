@@ -35,6 +35,42 @@ function manyRecords(count: number): CommitWrite {
     evidence: { ...seed.evidence, outputRefs: [seed.batch.ref, ...observations.map(item => item.ref)] } };
 }
 
+it('retries an actual busy final COMMIT with metadata limits while a second publisher waits', async () => {
+  const f = await fixture(10);
+  const other = createRetainedFilesystemRepository(f.options)!;
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+  let reader: InstanceType<typeof DatabaseSync> | undefined;
+  let blocked = 0, armed = true;
+  try {
+    await f.repo.commit(candidate('seed')); await other.receipt('seed');
+    reader = new DatabaseSync(join(f.directory, 'retention-v2.sqlite'));
+    const exec = DatabaseSync.prototype.exec;
+    vi.spyOn(DatabaseSync.prototype, 'exec').mockImplementation(function (this: InstanceType<typeof DatabaseSync>, sql: string) {
+      try { return exec.call(this, sql); }
+      catch (error) {
+        if (sql === 'COMMIT' && (error as { errcode?: number }).errcode === 5) {
+          blocked++; queueMicrotask(() => { if (reader!.isTransaction) reader!.exec('ROLLBACK'); });
+        }
+        throw error;
+      }
+    });
+    const native = FilesystemRepository.prototype.commit;
+    const publication = vi.spyOn(FilesystemRepository.prototype, 'commit').mockImplementation(async function (this: FilesystemRepository, write) {
+      const result = await native.call(this, write);
+      if (armed) { armed = false; reader!.exec('BEGIN'); reader!.prepare('SELECT * FROM elapsed_clock').all(); }
+      return result;
+    });
+    const results = await Promise.all([f.repo.commit(candidate('one')), other.commit(candidate('two'))]);
+    expect(results.map(result => result.status)).toEqual(['committed', 'committed']);
+    expect(blocked).toBeGreaterThan(0); expect(publication).toHaveBeenCalledTimes(2);
+    expect(await f.repo.metadataCapacity({ operations: 0, references: 0 })).toMatchObject({ operations: 3, references: 9 });
+    expect(await other.read(candidate('one').batch.ref)).toEqual(candidate('one').batch);
+    expect(f.alerts).toEqual([]);
+  } finally {
+    if (reader?.isTransaction) reader.exec('ROLLBACK'); reader?.close(); other.close(); await f.close();
+  }
+});
+
 it('refuses a new identity at the operation limit, emits health, and keeps exact old identities after expiry', async () => {
   const f = await fixture();
   try {

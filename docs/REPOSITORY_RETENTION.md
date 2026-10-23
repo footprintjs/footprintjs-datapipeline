@@ -1,5 +1,56 @@
 # Opt-in retained filesystem repository
 
+## Optional limits for exact retained metadata
+
+New `verified-uptime` namespaces may also supply `metadataLimits` with required
+`maxBytes`, `maxOperations` and `maxReferences`. There are no default limits.
+The limits are persisted as immutable namespace policy. Every reader, publisher
+and cleanup handle must supply the same policy; mismatched or older readers
+refuse it. Existing namespaces are not migrated. The existing `/filesystem`
+entry exports `RETAINED_REPOSITORY_SAFETY_VERSION = 1` so hosts pinned to older
+releases can refuse a requested safety profile before opening storage.
+
+The operation/reference limits are checked before a new intent is saved. An
+intent owns its identity even when publication is unconfirmed. Expired/deleted
+payloads do **not** free those identities: accepted IDs and exact expiry history
+are never forgotten or reused. At the limit, new work is refused with fixed
+`REPOSITORY_METADATA_LIMIT` health output. Count exhaustion does not disable
+existing reads, reconciliation or cleanup; native page/I/O exhaustion can still
+refuse them. The host needs an independent alert channel.
+Repeated refusals add no per-refusal row. This bounds growth by stopping admission;
+it does not provide perpetual availability or retire old periods. Choosing a
+history horizon still requires a separate identity/period-retirement design.
+
+`maxBytes` bounds the fixed SQLite control files, including allocated blocks and
+rollback journals. It is **not** a quota for payloads, traces, filesystem directory
+metadata, other processes or the whole disk. The minimum is 2 MiB and maximum
+1 TiB. The supported local filesystem must have allocation blocks at most
+64 KiB. A 1 MiB allowance covers the fixed format fence, sidecars, headers and
+allocation rounding; the remaining budget reserves three copies of each allowed
+4 KiB database page plus rollback frame overhead. SQLite's native page ceiling
+enforces the main-file bound even for one large intent. The new namespace uses
+DELETE journaling with cache spilling disabled, so a reader cannot pin an
+ever-growing WAL. Native I/O/page exhaustion remains `REPOSITORY_UNCONFIRMED`;
+it never implies that a publication did not happen, and is never retried.
+
+`repository.metadataCapacity({ operations, references })` reports exact retained
+counts, remaining counts, charged control-file bytes and the database page
+ceiling. It is a snapshot, **not a reservation**: later work or index-page growth
+may still refuse admission. A host can stop polling early using this snapshot,
+but must still handle an unconfirmed save and report the slot as a gap. Neither
+this function nor a refusal fabricates a saved collection receipt.
+
+The repeatable `repository-metadata-limits.test.ts` measurement accepts 20 native
+operations (three references each), refuses 100 more, and checks settled and
+dirty-transaction control bytes against a 2 MiB policy. Measured locally:
+69,632 B settled and 98,304 B observed during dirty transactions. Byte usage stays unchanged
+over the repeated refusals and exact counts survive reopen. A 5,000-reference
+intent proves native `SQLITE_FULL` rollback without publication; a later small
+commit succeeds. Real cleanup overlaps seven saves under the bounded profile.
+Native saved values, references, cause answers and separate missing-poll gaps
+also match the unbounded profile. These are local synthetic safety tests, not a
+fleet throughput result or a measured daily/annual storage projection.
+
 ## Optional verified-uptime expiry for new namespaces
 
 Set `expiryClock: 'verified-uptime'` to use elapsed time for expiry instead of

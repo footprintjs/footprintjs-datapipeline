@@ -21,20 +21,22 @@ vi.mock('node:fs/promises', async original => {
 });
 afterEach(() => { deletion.hold = undefined; vi.restoreAllMocks(); });
 
-async function fixture() {
+async function fixture(bounded = false) {
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'repository-contention-')));
   let now = 0;
   const alerts: unknown[] = [];
   const options = { enabled: true, directory, retentionMs: 100, requireSeparateFilesystem: false,
-    clock: () => now, onHealth: (event: unknown) => { alerts.push(event); } };
+    clock: () => now, onHealth: (event: unknown) => { alerts.push(event); },
+    ...(bounded ? { expiryClock: 'verified-uptime' as const, monotonicClock: () => now,
+      metadataLimits: { maxBytes: 2 * 1024 * 1024, maxOperations: 100, maxReferences: 1000 } } : {}) };
   const stores: ReturnType<typeof createRetainedFilesystemRepository>[] = [];
   function open() { const store = createRetainedFilesystemRepository(options)!; stores.push(store); return store; }
   return { directory, options, alerts, open, at: (value: number) => { now = value; },
     async close() { for (const store of stores) store!.close(); await rm(directory, { recursive: true, force: true }); } };
 }
 
-it('waits for a real cleanup transaction while independent poll saves compete, without losing receipts', async () => {
-  const f = await fixture(), cleanup = f.open(), poller = f.open();
+it.each([false, true])('waits for real cleanup with independent poll saves without losing receipts (bounded=%s)', async bounded => {
+  const f = await fixture(bounded), cleanup = f.open(), poller = f.open();
   const old = candidate('expired-before-polls');
   let release!: () => void, entered!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });

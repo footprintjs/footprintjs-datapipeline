@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Optional immutable operation, reference and SQLite control-file limits for
+  new verified-uptime retained namespaces. Exhaustion refuses new identities
+  and emits fixed health output; exact expired history is kept. Capacity is a
+  snapshot, not a reservation or a payload/disk quota. No period retirement,
+  default limit, migration or automatic activation is added.
+
 - Optional verified-uptime expiry for new retained namespaces. A persisted
   elapsed-age checkpoint prevents wall-clock corrections and unobserved restart
   downtime from expiring data early. Legacy readers are fenced; existing data

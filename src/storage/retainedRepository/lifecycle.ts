@@ -2,11 +2,16 @@ import { lstat, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { prepareDirectory } from '../guardedTrace/paths.js';
 import { RepositoryRetentionError, type RetainedRepositoryOptions } from './contracts.js';
+import { checkedMetadataLimits } from './metadataBudget.js';
 export function checkOptions(options: RetainedRepositoryOptions): void {
   if (!Number.isSafeInteger(options.retentionMs) || options.retentionMs < 1 || typeof options.onHealth !== 'function') throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
   if ((options.expiryClock !== undefined && options.expiryClock !== 'verified-uptime') ||
     (options.monotonicClock !== undefined && (options.expiryClock !== 'verified-uptime' || typeof options.monotonicClock !== 'function'))) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
   if (options.monotonicClock && (options.monotonicClock === Date.now || options.monotonicClock === options.clock)) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+  if (options.metadataLimits !== undefined) {
+    if (options.expiryClock !== 'verified-uptime') throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+    checkedMetadataLimits(options.metadataLimits);
+  }
 }
 export function time(options: RetainedRepositoryOptions): number {
   const now = (options.clock ?? Date.now)();

@@ -20,7 +20,12 @@ export class RetainedFilesystemRepository implements Repository {
   private readonly serial = new RepositorySerial();
   private readonly reads = new RepositoryReadBatcher(refs => this.readMany(refs));
   private publishing?: string;
-  constructor(private readonly options: RetainedRepositoryOptions) { checkOptions(options); this.options = Object.freeze({ ...options }); }
+  constructor(private readonly options: RetainedRepositoryOptions) {
+    checkOptions(options);
+    this.options = Object.freeze({ ...options, ...(options.metadataLimits ? { metadataLimits: Object.freeze({
+      maxBytes: options.metadataLimits.maxBytes, maxOperations: options.metadataLimits.maxOperations, maxReferences: options.metadataLimits.maxReferences,
+    }) } : {}) });
+  }
   private fresh = (row: Row): void => {
     const now = time(this.options);
     if (this.ledger!.expiredAt(row, now)) {
@@ -40,7 +45,7 @@ export class RetainedFilesystemRepository implements Repository {
     try { return await this.serial.run(() => this.transaction(fn)); }
     catch (error) {
       const code = error instanceof RepositoryRetentionError || error instanceof FilesystemRepositoryError ? error.code : undefined;
-      if (code === 'REPOSITORY_BUSY' || code === 'REPOSITORY_CLOCK_UNAVAILABLE' || code === 'REPOSITORY_UNCONFIRMED' || code === 'storage_corrupt') {
+      if (code === 'REPOSITORY_BUSY' || code === 'REPOSITORY_METADATA_LIMIT' || code === 'REPOSITORY_CLOCK_UNAVAILABLE' || code === 'REPOSITORY_UNCONFIRMED' || code === 'storage_corrupt') {
         try { void Promise.resolve(this.options.onHealth({ code: code === 'storage_corrupt' ? 'REPOSITORY_UNCONFIRMED' : code })).catch(() => {}); }
         catch { /* An independent health sink cannot change a storage outcome. */ }
       }
@@ -65,6 +70,10 @@ export class RetainedFilesystemRepository implements Repository {
     }
   }
   read(ref: RecordRef) { return this.reads.read(ref); }
+  /** A snapshot for host preflight, not a reservation or publication promise. */
+  metadataCapacity(request = { operations: 1, references: 1 }) {
+    return this.exclusive(async () => this.ledger!.metadataCapacity(request));
+  }
   readMany(refs: readonly RecordRef[]) { return this.exclusive(() => this.data!.readMany(refs)); }
   findOperation(id: string) {
     return this.exclusive(async () => {

@@ -360,5 +360,5 @@ export function createFilesystemTraceStore(options: FilesystemTraceOptions): Fil
 export { createGuardedFilesystemTraceStore, GuardedFilesystemTraceStore, TraceStorageError, TRACE_RETENTION_MS } from './guardedTrace/index.js';
 export type { GuardedTraceOptions, TraceStorageHealth, TraceStorageReceipt, TraceStorageGapReceipt, TraceStorageCode } from './guardedTrace/index.js';
 
-export { createRetainedFilesystemRepository, RetainedFilesystemRepository, RepositoryRetentionError } from './retainedRepository/index.js';
-export type { RetainedRepositoryOptions, RepositoryRetentionReceipt, RepositoryRetentionCode } from './retainedRepository/index.js';
+export { createRetainedFilesystemRepository, RetainedFilesystemRepository, RepositoryRetentionError, RETAINED_REPOSITORY_SAFETY_VERSION } from './retainedRepository/index.js';
+export type { RetainedRepositoryOptions, RepositoryRetentionReceipt, RepositoryRetentionCode, RepositoryMetadataLimits, RepositoryMetadataCapacity } from './retainedRepository/index.js';

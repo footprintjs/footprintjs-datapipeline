@@ -53,15 +53,23 @@ report expired inputs honestly. The app still owns claim/access checks.
 ## Cleanup and concurrency
 
 A durable expired tombstone precedes unlink. Each call selects at most 100
-operations. It removes only the known packed file and its empty operation
+operations. Unlink and parent synchronization run **outside** the database
+transaction, so slow disk cleanup does not hold the lock needed by polls. Once
+those finish, a short transaction confirms `dataDeleted: true`. A failure or crash
+between unlink and that acknowledgement keeps deletion unconfirmed; a later
+explicit cleanup verifies absence and synchronizes before confirming it. An
+expired identity can never publish again, including while its files are removed.
+Each handle allows one cleanup pass, rejects close while it runs, and yields
+between rows. This does not lengthen the admission wait or a poll's deadline.
+It removes only the known packed file and its empty operation
 folder, then syncs the parent. It does not recursively traverse folders or
 follow symlinked operations. Failed deletion keeps `dataDeleted: false`, emits
 a fixed health event, and can be retried. Tombstones and reference membership
 remain after data removal, so the original references say expired after restart.
 They are not automatically expired: metadata itself still grows.
 
-SQLite full-synchronous transactions serialize cooperating processes during
-native publication and reads. Competing readers, pollers and cleanup wait
+SQLite full-synchronous transactions serialize metadata, native publication and
+reads across cooperating processes. Competing readers, pollers and cleanup wait
 asynchronously for up to one second to **start each transaction**, including
 first-open schema admission. SQLite's synchronous busy handler stays disabled,
 so the wait does not block the event loop that must release the lock. This is

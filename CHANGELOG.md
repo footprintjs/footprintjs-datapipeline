@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Slow retained-payload unlink/sync no longer holds the database transaction.
+  Expiry is durable first; deletion proof commits only after filesystem work.
+  Poll saves can finish while cleanup is stalled. Per-handle cleanup and close
+  are bounded, and a lost post-unlink acknowledgement remains recoverable.
+
 - Retained repositories now wait asynchronously for bounded SQLite transaction
   admission, including first-open setup, so overlapping cleanup and publication
   do not fail immediately on a short lock. Exhausted admission and a full local

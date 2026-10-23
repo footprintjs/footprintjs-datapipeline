@@ -33,8 +33,8 @@ async function fixture() {
     async close() { for (const store of stores) store!.close(); await rm(directory, { recursive: true, force: true }); } };
 }
 
-it('waits for a real cleanup transaction while independent poll saves compete, without losing receipts', async () => {
-  const f = await fixture(), cleanup = f.open(), poller = f.open();
+it('publishes seven polls while real cleanup is still blocked on deletion, without losing receipts', async () => {
+  const f = await fixture(), cleanup = f.open(), pollers = Array.from({ length: 7 }, () => f.open());
   const old = candidate('expired-before-polls');
   let release!: () => void, entered!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -43,34 +43,58 @@ it('waits for a real cleanup transaction while independent poll saves compete, w
   const polls: Promise<unknown>[] = [];
   try {
     await cleanup.commit(old);
-    await poller.receipt(old.operationId); // Initialize both independent SQLite connections.
+    for (const poller of pollers) await poller.receipt(old.operationId);
     f.at(100);
     deletion.hold = async () => { entered(); await gate; };
     sweep = cleanup.sweep({ limit: 1 });
     await deleting;
-    const attempts: string[] = [];
-    const begin = RepositoryLedger.prototype.begin;
-    vi.spyOn(RepositoryLedger.prototype, 'begin').mockImplementation(function (this: RepositoryLedger) {
-      try { begin.call(this); } catch (error) { attempts.push('busy'); throw error; }
-    });
-    for (let i = 0; i < 7; i++) polls.push(poller.commit(candidate('poll-' + i)));
-    // Observe admission while deletion still holds the actual database lock.
+    for (let i = 0; i < 7; i++) polls.push(pollers[i]!.commit(candidate('poll-' + i)));
+    // Do not release deletion to make admission pass. Disk I/O can exceed any
+    // fixed admission budget; completed poll receipts must precede its release.
     const observed = polls.map(poll => poll.then(value => ({ value }), error => ({ error })));
-    for (let turn = 0; turn < 100 && attempts.length === 0; turn++) await yieldTurn();
-    expect(attempts.length).toBeGreaterThan(0);
-    release();
-    expect(await sweep).toEqual({ deleted: 1 });
     const outcomes = await Promise.all(observed);
     expect(outcomes.every(result => 'value' in result)).toBe(true);
     for (let i = 0; i < 7; i++) {
       const write = candidate('poll-' + i);
-      expect(await poller.receipt(write.operationId)).toMatchObject({ status: 'stored', publication: 'committed' });
-      expect(await poller.read(write.batch.ref)).toEqual(write.batch);
+      expect(await pollers[i]!.receipt(write.operationId)).toMatchObject({ status: 'stored', publication: 'committed' });
+      expect(await pollers[i]!.read(write.batch.ref)).toEqual(write.batch);
     }
+    expect(await pollers[0]!.receipt(old.operationId)).toMatchObject({ status: 'expired', dataDeleted: false });
+    const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+    const observer = new DatabaseSync(join(f.directory, 'retention.sqlite'));
+    try { observer.exec('BEGIN IMMEDIATE; ROLLBACK'); } finally { observer.close(); }
+    release();
+    expect(await sweep).toEqual({ deleted: 1 });
     expect(await cleanup.receipt(old.operationId)).toMatchObject({ status: 'expired', dataDeleted: true });
     expect(f.alerts).toEqual([]);
   } finally {
     release(); await Promise.allSettled([...polls, ...(sweep ? [sweep] : [])]); await f.close();
+  }
+});
+
+it('keeps close and overlapping cleanup bounded while allowing a same-handle publication', async () => {
+  const f = await fixture(), repo = f.open();
+  let release!: () => void, entered!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const deleting = new Promise<void>(resolve => { entered = resolve; });
+  let sweep: Promise<unknown> | undefined, overlap: Promise<unknown> | undefined, saved: Promise<unknown> | undefined;
+  try {
+    await repo.commit(candidate('old')); f.at(100);
+    deletion.hold = async () => { entered(); await gate; };
+    sweep = repo.sweep({ limit: 1 }); await deleting;
+    expect(() => repo.close()).toThrow(expect.objectContaining({ code: 'REPOSITORY_BUSY' }));
+    let refused = false;
+    overlap = repo.sweep({ limit: 1 }).then(() => {}, error => {
+      expect(error).toMatchObject({ code: 'REPOSITORY_BUSY' }); refused = true;
+    });
+    await yieldTurn(); expect(refused).toBe(true);
+    expect(f.alerts).toContainEqual({ code: 'REPOSITORY_BUSY' });
+    saved = repo.commit(candidate('same-handle'));
+    expect(await saved).toMatchObject({ status: 'committed' });
+    release(); expect(await sweep).toEqual({ deleted: 1 });
+    expect(await repo.receipt('same-handle')).toMatchObject({ status: 'stored', publication: 'committed' });
+  } finally {
+    release(); await Promise.allSettled([...(sweep ? [sweep] : []), ...(overlap ? [overlap] : []), ...(saved ? [saved] : [])]); await f.close();
   }
 });
 

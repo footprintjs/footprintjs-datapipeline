@@ -2,11 +2,16 @@ import { createRequire } from 'node:module';
 import { chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { RepositoryRetentionError, type RepositoryRetentionReceipt, type RetainedRepositoryOptions } from './contracts.js';
+import { RepositoryRetentionError, type RepositoryRetentionReceipt, type RetainedRepositoryOptions, type RepositoryHistoryPolicy } from './contracts.js';
 import { ElapsedAge } from './elapsedAge.js';
 import { clockFence } from './clockFence.js';
 import { MetadataBudget, metadataWriteFailure } from './metadataBudget.js';
 import { admitTransaction } from './admission.js';
+import { HistoryLedger } from './historyLedger.js';
+import { activateHistoryFence, validateActiveHistory } from './historyFence.js';
+import { validateOwnership } from './historyIdentity.js';
+import type { CommitWrite } from '../../ports.js';
+import type { RecordRef } from '../../contracts.js';
 export interface Row extends RepositoryRetentionReceipt { fingerprint: string; writeHash: string }
 function isBusy(error: unknown): boolean {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return false;
@@ -18,31 +23,43 @@ export class RepositoryLedger {
   private readonly db: DatabaseSync;
   private readonly age?: ElapsedAge;
   private readonly budget?: MetadataBudget;
+  private readonly history?: HistoryLedger;
+  private readonly historyPolicy?: RepositoryHistoryPolicy;
   constructor(directory: string, private readonly retentionMs: number, options?: RetainedRepositoryOptions) {
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
     const guarded = options?.expiryClock === 'verified-uptime';
+    let activeHistory = false;
     if (guarded) {
-      try { clockFence(DatabaseSync, directory, retentionMs); }
+      try { activeHistory = clockFence(DatabaseSync, directory, retentionMs, options?.historyRetirement?.namespaceId); }
       catch (error) { if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY'); throw error; }
     }
-    const path = join(directory, guarded ? 'retention-v2.sqlite' : 'retention.sqlite');
+    const history = options?.historyRetirement;
+    if (history) this.historyPolicy = history;
+    const ledgerFile = history ? 'retention-v3.sqlite' : 'retention-v2.sqlite';
+    const path = join(directory, guarded ? ledgerFile : 'retention.sqlite');
     this.db = new DatabaseSync(path);
     try {
       chmodSync(path, 0o600);
+      if (activeHistory) validateActiveHistory(this.db);
       if (guarded) {
         this.db.exec(`PRAGMA page_size=4096; PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=0; BEGIN IMMEDIATE;
           CREATE TABLE IF NOT EXISTS policy(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,retentionMs INTEGER NOT NULL,settings TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0,acceptedAgeMs INTEGER NOT NULL,expiresAgeMs INTEGER NOT NULL);
+          CREATE TABLE IF NOT EXISTS operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0,acceptedAgeMs INTEGER NOT NULL,expiresAgeMs INTEGER NOT NULL${history ? ',period INTEGER NOT NULL' : ''});
           CREATE INDEX IF NOT EXISTS expiry ON operations(expiresAgeMs) WHERE dataDeleted=0;
           CREATE TABLE IF NOT EXISTS refs(refHash TEXT PRIMARY KEY,operationHash TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS elapsed_clock(id INTEGER PRIMARY KEY CHECK(id=1),ageMs INTEGER NOT NULL);`);
-        const settings = JSON.stringify({ expiryClock: 'verified-uptime', ...(options.metadataLimits ? { metadataLimits: options.metadataLimits } : {}) });
-        this.db.prepare('INSERT OR IGNORE INTO policy VALUES(1,2,?,?)').run(retentionMs, settings);
+        const settings = JSON.stringify({ expiryClock: 'verified-uptime', ...(options.metadataLimits ? { metadataLimits: options.metadataLimits } : {}),
+          ...(history ? { historyRetirement: { profile: history.profile, keepDays: history.keepDays, namespaceId: history.namespaceId, maxOperationBytes: history.maxOperationBytes } } : {}) });
+        const version = history ? 3 : 2;
+        this.db.prepare('INSERT OR IGNORE INTO policy VALUES(1,?,?,?)').run(version, retentionMs, settings);
         const policy = this.db.prepare('SELECT * FROM policy WHERE id=1').get();
-        if (policy?.version !== 2 || policy.retentionMs !== retentionMs || policy.settings !== settings) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
-        this.db.exec('INSERT OR IGNORE INTO elapsed_clock VALUES(1,0); COMMIT');
-        if (options.metadataLimits) this.budget = new MetadataBudget(this.db, directory, options.metadataLimits);
+        if (policy?.version !== version || policy.retentionMs !== retentionMs || policy.settings !== settings) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+        this.db.exec('INSERT OR IGNORE INTO elapsed_clock VALUES(1,0)');
         this.age = new ElapsedAge(this.db, options.monotonicClock ?? (() => performance.now()));
+        if (history) this.history = new HistoryLedger(this.db, history, () => this.age!.now(), hash => this.row(hash)!);
+        this.db.exec('COMMIT');
+        if (options.metadataLimits) this.budget = new MetadataBudget(this.db, directory, options.metadataLimits, ledgerFile, !!history);
+        if (history) activateHistoryFence(DatabaseSync, directory, history.namespaceId);
         return;
       }
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=0;
@@ -92,6 +109,8 @@ export class RepositoryLedger {
       ![0, 1].includes(Number(row.dataDeleted)) || (row.dataDeleted === 1 && row.status !== 'expired')) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
     if (this.age && (!Number.isSafeInteger(row.acceptedAgeMs) || Number(row.acceptedAgeMs) < 0 ||
       !Number.isSafeInteger(row.expiresAgeMs) || Number(row.expiresAgeMs) - Number(row.acceptedAgeMs) !== this.retentionMs)) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
+    if (this.historyPolicy && (!Number.isSafeInteger(row.period) || Number(row.period) < 0 ||
+      Math.floor(Number(row.acceptedAgeMs) / 86400_000) !== row.period)) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
     return { ...row, publication: row.confirmed === 1 ? 'committed' : 'unconfirmed', dataDeleted: row.dataDeleted === 1,
       ...(this.age ? { expiryClock: 'verified-uptime' } : {}) } as unknown as Row;
   }
@@ -99,16 +118,18 @@ export class RepositoryLedger {
     const row = this.db.prepare('SELECT operationHash FROM refs WHERE refHash=?').get(refHash);
     return row ? this.row(String(row.operationHash)) : undefined;
   }
-  intent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number): void {
+  intent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number, period?: number): void {
     this.budget?.admit(refs.length);
-    try { this.insertIntent(hash, fingerprint, writeHash, refs, now, retentionMs); }
+    try { this.insertIntent(hash, fingerprint, writeHash, refs, now, retentionMs, period); }
     catch (error) { if (this.budget) metadataWriteFailure(error); throw error; }
   }
-  private insertIntent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number): void {
+  private insertIntent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number, period?: number): void {
     if (this.age) {
       const age = this.age.now();
       if (!Number.isSafeInteger(age + retentionMs)) throw new RepositoryRetentionError('REPOSITORY_CLOCK_UNAVAILABLE');
-      this.db.prepare("INSERT INTO operations VALUES(?,?,?,?,?,'pending',0,0,?,?)").run(hash, fingerprint, writeHash, now, now + retentionMs, age, age + retentionMs);
+      const values = [hash, fingerprint, writeHash, now, now + retentionMs, age, age + retentionMs];
+      if (this.history) values.push(period!);
+      this.db.prepare(`INSERT INTO operations VALUES(?,?,?,?,?,'pending',0,0,?,?${this.history ? ',?' : ''})`).run(...values);
     } else this.db.prepare("INSERT INTO operations VALUES(?,?,?,?,?,'pending',0,0)").run(hash, fingerprint, writeHash, now, now + retentionMs);
     const insert = this.db.prepare('INSERT INTO refs VALUES(?,?)');
     for (const ref of refs) insert.run(ref, hash);
@@ -118,6 +139,22 @@ export class RepositoryLedger {
   deleted(hash: string): void { this.db.prepare('UPDATE operations SET dataDeleted=1 WHERE operationHash=?').run(hash); }
   expiredAt(row: Row, wall: number): boolean { return row.status === 'expired' || (this.age ? row.expiresAgeMs! <= this.age.now() : row.expiresAt <= wall); }
   wallBased(): boolean { return !this.age; }
+  checkOperation(id: string, intent: 'lookup' | 'admit' = 'lookup'): number | undefined { return this.history?.check(id, 'o', intent); }
+  checkRefs(refs: readonly RecordRef[]): void { this.history?.checkRefs(refs); }
+  validatePeriodWrite(write: CommitWrite): number | undefined {
+    if (!this.history) return undefined;
+    this.history.check(write.operationId, 'o', 'admit');
+    return validateOwnership(write, this.historyPolicy!);
+  }
+  historyStatus() {
+    if (!this.history) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+    return this.history.status();
+  }
+  retireHistory(limit: number) {
+    if (!this.history) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+    try { return this.history.retire(limit); }
+    catch (error) { if (this.budget) metadataWriteFailure(error); throw error; }
+  }
   metadataCapacity(request: { operations: number; references: number }) {
     if (!this.budget) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
     return this.budget.capacity(request);

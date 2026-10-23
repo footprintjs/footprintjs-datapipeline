@@ -2,9 +2,17 @@ import { join } from 'node:path';
 import type { RecordRef, StoredRecord } from '../../contracts.js';
 import { FilesystemRepository } from '../filesystem.js';
 import { refKey } from '../filesystemRecords.js';
+import { createHistoryStage } from './historyStaging.js';
+import { operationHash } from './commit.js';
 /** Native packed decoder and content checks, with ledger-selected operation addresses. */
 export class IndexedData extends FilesystemRepository {
-  constructor(directory: string, private readonly lookup: (refs: readonly RecordRef[]) => Promise<readonly (StoredRecord | undefined)[]>) { super({ directory, packing: 'gzip' }); }
+  constructor(directory: string, private readonly lookup: (refs: readonly RecordRef[]) => Promise<readonly (StoredRecord | undefined)[]>,
+    maxPackedBytes?: number, private readonly managedHistory = false) {
+    super({ directory, packing: 'gzip', ...(maxPackedBytes === undefined ? {} : { maxPackedBytes }) });
+  }
+  protected override createStagingDirectory(id: string): Promise<string> {
+    return this.managedHistory ? createHistoryStage(this.directory, operationHash(id)) : super.createStagingDirectory(id);
+  }
   override async read(ref: RecordRef): Promise<StoredRecord | undefined> { return (await this.lookup([ref]))[0]; }
   override readMany(refs: readonly RecordRef[]): Promise<readonly (StoredRecord | undefined)[]> { return this.lookup(refs); }
   async readAt(hash: string, refs: readonly RecordRef[]): Promise<readonly (StoredRecord | undefined)[]> {

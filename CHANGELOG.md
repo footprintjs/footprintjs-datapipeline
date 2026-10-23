@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Optional daily-period history retirement for fresh verified-uptime namespaces.
+  Required finite host policy, period-bound core IDs, durable retired-prefix
+  fencing, cumulative checkpoints, bounded row reclamation and reusable metadata
+  capacity. The laptop example keeps seven days. Stable managed staging bounds
+  interrupted retries. Existing stores/IDs and defaults are unchanged; no timer,
+  migration, deployment or source-authenticity claim is added.
+
 - Optional immutable operation, reference and SQLite control-file limits for
   new verified-uptime retained namespaces. Exhaustion refuses new identities
   and emits fixed health output; exact expired history is kept. Capacity is a

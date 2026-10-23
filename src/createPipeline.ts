@@ -59,6 +59,7 @@ export function createPipeline(options: PipelineOptions): Pipeline {
   const adapters = registry(options.adapters.map(adapter => ({ ref: freeze(cloneJson(adapter.ref)), collect: adapter.collect.bind(adapter) })));
   const transforms = registry((options.transforms ?? []).map(transform => ({ ref: freeze(cloneJson(transform.ref)), apply: transform.apply.bind(transform) })));
   const repository = options.repository;
+  const identity = repository.identity;
   const traceStore = options.traceStore;
   const clock = options.clock ?? (() => new Date().toISOString());
   const now = () => { const value = clock(); assertTimestamp(value); return value; };
@@ -84,7 +85,9 @@ export function createPipeline(options: PipelineOptions): Pipeline {
     let operationId = 'invalid-request';
     try {
       const request = validatedRequest(requestInput);
-      operationId = digest({ kind: 'collect', key: request.idempotencyKey });
+      const logicalId = digest({ kind: 'collect', key: request.idempotencyKey });
+      operationId = identity ? identity.operationId(logicalId) : logicalId;
+      if (identity) await identity.assertOperation(operationId, 'lookup');
       const { origin } = resolveCollect(request);
       const fingerprint = digest({ request, origin });
       const existing = await repository.findOperation(operationId);
@@ -101,7 +104,8 @@ export function createPipeline(options: PipelineOptions): Pipeline {
     let operationId = 'invalid-request';
     try {
       const request = validatedRequest(requestInput);
-      operationId = digest({ kind, key: request.idempotencyKey });
+      const logicalId = digest({ kind, key: request.idempotencyKey });
+      operationId = identity ? identity.operationId(logicalId) : logicalId;
       let source: Source | undefined;
       let adapter: SourceAdapter | undefined;
       let transform: Transform | undefined;
@@ -153,6 +157,7 @@ export function createPipeline(options: PipelineOptions): Pipeline {
         let receipt: CommitReceipt;
         try {
           controller.signal.throwIfAborted();
+          if (identity) await abortable(identity.assertOperation(operationId, 'admit'), controller.signal);
           const existing = await abortable(repository.findOperation(operationId), controller.signal);
           if (existing) {
             if (existing.fingerprint !== fingerprint) throw new PipelineFault('IDEMPOTENCY_CONFLICT', 'This idempotency key was used for a different request');
@@ -162,7 +167,9 @@ export function createPipeline(options: PipelineOptions): Pipeline {
               controller.signal.throwIfAborted();
               const candidate = validateCandidate(raw, limits);
               const finishedAt = now();
-              const ref = <K extends 'batch' | 'observation' | 'evidence'>(recordKind: K, key: string) => ({ kind: recordKind, id: digest({ operationId, kind: recordKind, key }) });
+              const ref = <K extends 'batch' | 'observation' | 'evidence'>(recordKind: K, key: string) => identity
+                ? identity.reference(operationId, recordKind, key)
+                : ({ kind: recordKind, id: digest({ operationId, kind: recordKind, key }) });
               const batchRef = ref('batch', candidate.key), evidenceRef = ref('evidence', candidate.key);
               const allowed = new Set(selectedInputs.flatMap(input => [canonical(input.batch.ref), ...input.observations.map(item => canonical(item.ref))]));
               const observations: Observation[] = candidate.observations.map(item => {

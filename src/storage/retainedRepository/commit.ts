@@ -15,6 +15,7 @@ export function snapshotWrite(input: CommitWrite): CommitWrite {
   return write;
 }
 export function prepareIntent(write: CommitWrite, ledger: RepositoryLedger, fresh: (row: Row) => void, now: number, retentionMs: number): void {
+  const period = ledger.validatePeriodWrite(write);
   const hash = operationHash(write.operationId), previous = ledger.row(hash);
   if (previous) {
     fresh(previous);
@@ -27,5 +28,5 @@ export function prepareIntent(write: CommitWrite, ledger: RepositoryLedger, fres
     const owner = ledger.owner(ref);
     if (owner) { fresh(owner); throw new FilesystemRepositoryError('reference_conflict', 'A retained reference already belongs to another operation.'); }
   }
-  ledger.intent(hash, digest(write.fingerprint), digest(write), refs, now, retentionMs);
+  ledger.intent(hash, digest(write.fingerprint), digest(write), refs, now, retentionMs, period);
 }

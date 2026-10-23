@@ -2,6 +2,12 @@
 
 ## Optional limits for exact retained metadata
 
+**Guard only; blocked on growth reduction.** The caps below retain the original
+per-record metadata and eventually stop admission permanently, even after payload
+cleanup. They do not make the repository a sustainable service. The required
+[sealed-period integration plan](design/2026-10-expired-metadata-rollups.md) keeps
+this feature in draft. No compaction or history retirement is implemented here.
+
 New `verified-uptime` namespaces may also supply `metadataLimits` with required
 `maxBytes`, `maxOperations` and `maxReferences`. There are no default limits.
 The limits are persisted as immutable namespace policy. Every reader, publisher
@@ -29,9 +35,12 @@ metadata, other processes or the whole disk. The minimum is 2 MiB and maximum
 allocation rounding; the remaining budget reserves three copies of each allowed
 4 KiB database page plus rollback frame overhead. SQLite's native page ceiling
 enforces the main-file bound even for one large intent. The new namespace uses
-DELETE journaling with cache spilling disabled, so a reader cannot pin an
-ever-growing WAL. Native I/O/page exhaustion remains `REPOSITORY_UNCONFIRMED`;
-it never implies that a publication did not happen, and is never retried.
+DELETE journaling with cache spilling disabled; both settings are checked on
+admission, so a reader cannot pin an ever-growing WAL. A native `SQLITE_FULL`
+raised by the ledger's new-intent write is `REPOSITORY_METADATA_LIMIT`, including
+when SQLite has already rolled the transaction back. A publication-side failure
+remains `REPOSITORY_UNCONFIRMED`, even if its error happens to carry the same
+number. Neither outcome is permission to retry a publication or an uncertain send.
 
 `repository.metadataCapacity({ operations, references })` reports exact retained
 counts, remaining counts, charged control-file bytes and the database page
@@ -45,11 +54,20 @@ operations (three references each), refuses 100 more, and checks settled and
 dirty-transaction control bytes against a 2 MiB policy. Measured locally:
 69,632 B settled and 98,304 B observed during dirty transactions. Byte usage stays unchanged
 over the repeated refusals and exact counts survive reopen. A 5,000-reference
-intent proves native `SQLITE_FULL` rollback without publication; a later small
+intent proves native `SQLITE_FULL` rollback without publication, its limit health
+code, and SQLite's implicit transaction rollback; a later small
 commit succeeds. Real cleanup overlaps seven saves under the bounded profile.
 Native saved values, references, cause answers and separate missing-poll gaps
 also match the unbounded profile. These are local synthetic safety tests, not a
 fleet throughput result or a measured daily/annual storage projection.
+
+Additional tests measure the **actual live rollback journal** and compare its
+allocated bytes plus the main/fence files against the library's reported charge.
+The maximum native page allowance is also checked against room for a complete
+rollback image, a conservative header and the existing fixed files. A real
+SQLite connection confirms cache spilling is disabled, and turning it on is
+refused. Removing journal charging, over-allocating native pages, or removing
+the spill setting must each fail a test. See [SQLite's journal layout](https://www.sqlite.org/fileformat2.html#the_rollback_journal).
 
 ## Optional verified-uptime expiry for new namespaces
 
@@ -147,15 +165,23 @@ report expired inputs honestly. The app still owns claim/access checks.
 ## Cleanup and concurrency
 
 A durable expired tombstone precedes unlink. Each call selects at most 100
-operations. It removes only the known packed file and its empty operation
+operations. Unlink and parent synchronization run **outside** the database
+transaction, so slow disk cleanup does not hold the lock needed by polls. Once
+those finish, a short transaction confirms `dataDeleted: true`. A failure or crash
+between unlink and that acknowledgement keeps deletion unconfirmed; a later
+explicit cleanup verifies absence and synchronizes before confirming it. An
+expired identity can never publish again, including while its files are removed.
+Each handle allows one cleanup pass, rejects close while it runs, and yields
+between rows. This does not lengthen the admission wait or a poll's deadline.
+It removes only the known packed file and its empty operation
 folder, then syncs the parent. It does not recursively traverse folders or
 follow symlinked operations. Failed deletion keeps `dataDeleted: false`, emits
 a fixed health event, and can be retried. Tombstones and reference membership
 remain after data removal, so the original references say expired after restart.
 They are not automatically expired: metadata itself still grows.
 
-SQLite full-synchronous transactions serialize cooperating processes during
-native publication and reads. Competing readers, pollers and cleanup wait
+SQLite full-synchronous transactions serialize metadata, native publication and
+reads across cooperating processes. Competing readers, pollers and cleanup wait
 asynchronously for up to one second to **start each transaction**, including
 first-open schema admission. SQLite's synchronous busy handler stays disabled,
 so the wait does not block the event loop that must release the lock. This is

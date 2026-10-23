@@ -13,6 +13,12 @@ export function checkedMetadataLimits(limits: RepositoryMetadataLimits): void {
     !Number.isSafeInteger(limits.maxOperations) || limits.maxOperations < 1 ||
     !Number.isSafeInteger(limits.maxReferences) || limits.maxReferences < 1) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
 }
+/** Only call at a ledger-owned SQLite write boundary, never for publication errors. */
+export function metadataWriteFailure(error: unknown): never {
+  const code: unknown = error && typeof error === 'object' ? Object.getOwnPropertyDescriptor(error, 'errcode')?.value : undefined;
+  if (typeof code === 'number' && (code & 255) === 13) throw new RepositoryRetentionError('REPOSITORY_METADATA_LIMIT');
+  throw error;
+}
 /** Fixed control files only; payloads/traces and other processes need their own disk guard. */
 export class MetadataBudget {
   readonly pageLimit: number;
@@ -31,7 +37,8 @@ export class MetadataBudget {
     this.checkFiles();
   }
   checkFiles(): number {
-    if (this.db.prepare('PRAGMA journal_mode').get()!.journal_mode !== 'delete') throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
+    if (this.db.prepare('PRAGMA journal_mode').get()!.journal_mode !== 'delete' ||
+      this.db.prepare('PRAGMA cache_spill').get()!.cache_spill !== 0) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
     let bytes = 0;
     for (const name of CONTROL_FILES) {
       try {

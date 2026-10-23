@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { expect, it, vi } from 'vitest';
 import { FilesystemRepository } from '../src/storage/filesystem.js';
 import { createRetainedFilesystemRepository } from '../src/storage/retainedRepository/index.js';
+import { RepositoryLedger } from '../src/storage/retainedRepository/ledger.js';
 import { candidate } from './helpers/filesystem-candidate.js';
 const fault = vi.hoisted(() => ({ remove: false, scans: 0, beforeDelete: undefined as (() => void) | undefined }));
 vi.mock('node:fs/promises', async original => {
@@ -122,5 +123,25 @@ it('expiry preserves publication uncertainty when native data was never acknowle
     await expect(f.repo.commit(write)).rejects.toMatchObject({code:'REPOSITORY_UNCONFIRMED'});
     f.at(100); expect(await f.repo.sweep({limit:1})).toEqual({deleted:1});
     expect(await f.repo.receipt(write.operationId)).toMatchObject({status:'expired',publication:'unconfirmed',dataDeleted:true});
+  } finally { await f.close(); }
+});
+
+it('recovers deletion after unlink succeeded but its metadata acknowledgement failed', async () => {
+  const f = await fixture(), write = candidate();
+  try {
+    await f.repo.commit(write); f.at(100);
+    const acknowledgement = vi.spyOn(RepositoryLedger.prototype, 'deleted').mockImplementationOnce(() => { throw Error('private acknowledgement failure'); });
+    await expect(f.repo.sweep({ limit: 1 })).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
+    const hash = createHash('sha256').update(write.operationId).digest('hex');
+    expect(await readdir(join(f.directory, 'operations'))).not.toContain(hash);
+    expect(await f.repo.receipt(write.operationId)).toMatchObject({ status: 'expired', dataDeleted: false });
+    expect(f.alerts).toContainEqual({ code: 'REPOSITORY_UNCONFIRMED' });
+    acknowledgement.mockRestore(); f.repo.close();
+    const restarted = createRetainedFilesystemRepository(f.options)!;
+    try {
+      expect(await restarted.sweep({ limit: 1 })).toEqual({ deleted: 1 });
+      expect(await restarted.receipt(write.operationId)).toMatchObject({ status: 'expired', dataDeleted: true });
+      await expect(restarted.commit(write)).rejects.toMatchObject({ code: 'REPOSITORY_EXPIRED' });
+    } finally { restarted.close(); }
   } finally { await f.close(); }
 });

@@ -7,11 +7,20 @@
   and emits fixed health output; exact expired history is kept. Capacity is a
   snapshot, not a reservation or a payload/disk quota. No period retirement,
   default limit, migration or automatic activation is added.
+  This is an emergency admission guard only: metadata growth is not reduced,
+  and sealed-period integration remains a required, unimplemented readiness gate.
+  A native ledger-intent `SQLITE_FULL` reports the limit; unrelated publication
+  failures keep their unconfirmed meaning.
 
 - Optional verified-uptime expiry for new retained namespaces. A persisted
   elapsed-age checkpoint prevents wall-clock corrections and unobserved restart
   downtime from expiring data early. Legacy readers are fenced; existing data
   and wall-clock namespaces are not converted.
+
+- Slow retained-payload unlink/sync no longer holds the database transaction.
+  Expiry is durable first; deletion proof commits only after filesystem work.
+  Poll saves can finish while cleanup is stalled. Per-handle cleanup and close
+  are bounded, and a lost post-unlink acknowledgement remains recoverable.
 
 - Retained repositories now wait asynchronously for bounded SQLite transaction
   admission, including first-open setup, so overlapping cleanup and publication

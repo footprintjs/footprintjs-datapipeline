@@ -5,7 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { RepositoryRetentionError, type RepositoryRetentionReceipt, type RetainedRepositoryOptions } from './contracts.js';
 import { ElapsedAge } from './elapsedAge.js';
 import { clockFence } from './clockFence.js';
-import { MetadataBudget } from './metadataBudget.js';
+import { MetadataBudget, metadataWriteFailure } from './metadataBudget.js';
 export interface Row extends RepositoryRetentionReceipt { fingerprint: string; writeHash: string }
 function isBusy(error: unknown): boolean {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return false;
@@ -68,7 +68,7 @@ export class RepositoryLedger {
     }
   }
   commit(): void { this.age?.checkpoint(); this.db.exec('COMMIT'); }
-  rollback(): void { this.db.exec('ROLLBACK'); }
+  rollback(): void { if (this.db.isTransaction) this.db.exec('ROLLBACK'); }
   row(hash: string): Row | undefined {
     const row = this.db.prepare('SELECT * FROM operations WHERE operationHash=?').get(hash);
     if (!row) return undefined;
@@ -88,6 +88,10 @@ export class RepositoryLedger {
   }
   intent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number): void {
     this.budget?.admit(refs.length);
+    try { this.insertIntent(hash, fingerprint, writeHash, refs, now, retentionMs); }
+    catch (error) { if (this.budget) metadataWriteFailure(error); throw error; }
+  }
+  private insertIntent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number): void {
     if (this.age) {
       const age = this.age.now();
       if (!Number.isSafeInteger(age + retentionMs)) throw new RepositoryRetentionError('REPOSITORY_CLOCK_UNAVAILABLE');

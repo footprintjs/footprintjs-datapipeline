@@ -1,10 +1,14 @@
 import { mkdtemp, realpath, rm, unlink } from 'node:fs/promises';
-import { lstatSync, readdirSync } from 'node:fs';
+import { lstatSync, readdirSync, statfsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createRequire } from 'node:module';
 import { expect, it, vi } from 'vitest';
 import { createRetainedFilesystemRepository } from '../src/storage/retainedRepository/index.js';
 import { RepositoryLedger } from '../src/storage/retainedRepository/ledger.js';
+import { MetadataBudget } from '../src/storage/retainedRepository/metadataBudget.js';
+import * as metadataModule from '../src/storage/retainedRepository/metadataBudget.js';
+import { FilesystemRepository } from '../src/storage/filesystem.js';
 import { candidate } from './helpers/filesystem-candidate.js';
 import type { CommitWrite } from '../src/ports.js';
 
@@ -76,18 +80,83 @@ it('persists immutable limits, snapshots caller settings and refuses readers wit
 it('bounds native SQLite growth even when a single new intent exhausts its page budget', async () => {
   const f = await fixture(10000, 100000);
   let nativeError: unknown;
-  const original = RepositoryLedger.prototype.intent;
-  vi.spyOn(RepositoryLedger.prototype, 'intent').mockImplementation(function (this: RepositoryLedger, ...args) {
-    try { original.apply(this, args); } catch (error) { nativeError = error; throw error; }
+  const original = metadataModule.metadataWriteFailure;
+  vi.spyOn(metadataModule, 'metadataWriteFailure').mockImplementation(error => {
+    nativeError = error; return original(error);
   });
   try {
-    await expect(f.repo.commit(manyRecords(5000))).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
+    await expect(f.repo.commit(manyRecords(5000))).rejects.toMatchObject({ code: 'REPOSITORY_METADATA_LIMIT' });
     expect(nativeError).toMatchObject({ errcode: 13 }); // SQLITE_FULL, not an unrelated packing/input refusal.
     expect(await f.repo.receipt('many-records')).toBeUndefined();
     expect(controlBytes(f.directory)).toBeLessThanOrEqual(f.options.metadataLimits.maxBytes);
     expect(await f.repo.findOperation('many-records')).toBeUndefined();
     expect((await f.repo.commit(candidate('small-after-full'))).status).toBe('committed');
-    expect(f.alerts).toContainEqual({ code: 'REPOSITORY_UNCONFIRMED' });
+    expect(f.alerts).toContainEqual({ code: 'REPOSITORY_METADATA_LIMIT' });
+  } finally { await f.close(); }
+});
+
+it('charges the actual live rollback journal along with the main database', async () => {
+  const f = await fixture(); let budget: MetadataBudget | undefined;
+  const samples: { journalSize: number; actual: number; reported: number; journalBytes: number }[] = [];
+  const check = MetadataBudget.prototype.checkFiles;
+  vi.spyOn(MetadataBudget.prototype, 'checkFiles').mockImplementation(function (this: MetadataBudget) {
+    budget = this; return check.call(this);
+  });
+  const intent = RepositoryLedger.prototype.intent;
+  vi.spyOn(RepositoryLedger.prototype, 'intent').mockImplementation(function (this: RepositoryLedger, ...args) {
+    intent.apply(this, args);
+    const journal = lstatSync(join(f.directory, 'retention-v2.sqlite-journal'));
+    samples.push({ journalSize: journal.size, actual: controlBytes(f.directory), reported: budget!.checkFiles(),
+      journalBytes: Math.max(journal.size, journal.blocks * 512) });
+  });
+  try {
+    await f.repo.commit(candidate('journal')); expect(samples).toHaveLength(1);
+    for (const sample of samples) {
+      expect(sample.journalSize).toBeGreaterThan(0);
+      expect(sample.reported).toBe(sample.actual);
+      expect(sample.reported).toBeGreaterThan(sample.actual - sample.journalBytes);
+    }
+  }
+  finally { await f.close(); }
+});
+
+it('reserves room for the maximum main file plus a complete rollback image and fixed control files', async () => {
+  const f = await fixture();
+  try {
+    await f.repo.commit(candidate('reserve'));
+    const capacity = await f.repo.metadataCapacity();
+    const block = statfsSync(f.directory).bsize, page = 4096;
+    const mainMaximum = Math.ceil(capacity.databasePageLimit * page / block) * block;
+    // SQLite rollback page records have a 4-byte page number and checksum.
+    const rollbackMaximum = Math.ceil((capacity.databasePageLimit * (page + 8) + 65536) / block) * block;
+    const main = lstatSync(join(f.directory, 'retention-v2.sqlite'));
+    const fixedFiles = controlBytes(f.directory) - Math.max(main.size, main.blocks * 512);
+    expect(mainMaximum + rollbackMaximum + fixedFiles).toBeLessThanOrEqual(capacity.limits.maxBytes);
+  } finally { await f.close(); }
+});
+
+it('disables cache spilling so repeated rollback headers cannot bypass the journal reservation', async () => {
+  const f = await fixture();
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+  let db: InstanceType<typeof DatabaseSync> | undefined;
+  try {
+    await f.repo.commit(candidate('spill')); f.repo.close();
+    db = new DatabaseSync(join(f.directory, 'retention-v2.sqlite'));
+    const budget = new MetadataBudget(db, f.directory, f.options.metadataLimits);
+    expect(db.prepare('PRAGMA cache_spill').get()!.cache_spill).toBe(0);
+    db.exec('PRAGMA cache_spill=ON');
+    expect(() => budget.checkFiles()).toThrow(expect.objectContaining({ code: 'REPOSITORY_UNCONFIRMED' }));
+  } finally { db?.close(); await f.close(); }
+});
+
+it('does not mistake a publication-side error carrying a SQLite-like number for a metadata limit', async () => {
+  const f = await fixture();
+  const native = vi.spyOn(FilesystemRepository.prototype, 'commit').mockRejectedValue(Object.assign(Error('private'), { errcode: 13 }));
+  try {
+    await expect(f.repo.commit(candidate('publication-error'))).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
+    expect(native).toHaveBeenCalledTimes(1);
+    expect(f.alerts).not.toContainEqual({ code: 'REPOSITORY_METADATA_LIMIT' });
+    expect(await f.repo.receipt('publication-error')).toMatchObject({ status: 'pending', publication: 'unconfirmed' });
   } finally { await f.close(); }
 });
 

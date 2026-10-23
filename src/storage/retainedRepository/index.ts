@@ -10,6 +10,7 @@ import type { IndexedData } from './indexedData.js';
 import { readOwned } from './readOwned.js';
 import { prepareIntent, snapshotWrite, operationHash } from './commit.js';
 import { removeOperation } from './cleanup.js';
+import { admitTransaction } from './admission.js';
 export * from './contracts.js';
 /** Explicit, packed, managed namespace. No timer, automatic resend or legacy adoption. */
 export class RetainedFilesystemRepository implements Repository {
@@ -35,11 +36,21 @@ export class RetainedFilesystemRepository implements Repository {
     const { IndexedData } = await import('./indexedData.js');
     this.data = new IndexedData(this.path, refs => readOwned(refs, this.ledger!, this.data!, this.fresh, this.publishing));
   }
-  private exclusive<T>(fn: () => Promise<T>): Promise<T> { return this.serial.run(() => this.transaction(fn)); }
+  private async exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    try { return await this.serial.run(() => this.transaction(fn)); }
+    catch (error) {
+      const code = error instanceof RepositoryRetentionError || error instanceof FilesystemRepositoryError ? error.code : undefined;
+      if (code === 'REPOSITORY_BUSY' || code === 'REPOSITORY_UNCONFIRMED' || code === 'storage_corrupt') {
+        try { void Promise.resolve(this.options.onHealth({ code: code === 'REPOSITORY_BUSY' ? code : 'REPOSITORY_UNCONFIRMED' })).catch(() => {}); }
+        catch { /* An independent health sink cannot change a storage outcome. */ }
+      }
+      throw error;
+    }
+  }
   private async transaction<T>(fn: () => Promise<T>): Promise<T> {
     let begun = false;
     try {
-      await this.ready(); this.ledger!.begin(); begun = true;
+      await admitTransaction(async () => { await this.ready(); this.ledger!.begin(); }); begun = true;
       const result = await fn(); this.ledger!.commit(); begun = false; return result;
     } catch (error) {
       let failure = error;
@@ -50,9 +61,6 @@ export class RetainedFilesystemRepository implements Repository {
         } catch { failure = new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); }
       }
       const safe = failure instanceof RepositoryRetentionError || failure instanceof FilesystemRepositoryError ? failure : new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
-      if (safe.code === 'REPOSITORY_UNCONFIRMED' || safe.code === 'storage_corrupt') {
-        try { void Promise.resolve(this.options.onHealth({ code: 'REPOSITORY_UNCONFIRMED' })).catch(() => {}); } catch { /* Independent health must not alter outcomes. */ }
-      }
       throw safe;
     }
   }

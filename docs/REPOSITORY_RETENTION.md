@@ -61,8 +61,20 @@ remain after data removal, so the original references say expired after restart.
 They are not automatically expired: metadata itself still grows.
 
 SQLite full-synchronous transactions serialize cooperating processes during
-native publication and reads; another process receives `REPOSITORY_BUSY` rather
-than waiting indefinitely. Per instance at most 32 transactions are queued.
+native publication and reads. Competing readers, pollers and cleanup wait
+asynchronously for up to one second to **start each transaction**, including
+first-open schema admission. SQLite's synchronous busy handler stays disabled,
+so the wait does not block the event loop that must release the lock. This is
+an admission budget, not an end-to-end operation deadline. Per instance at most
+32 transactions are queued; queue wait and native I/O are separate costs.
+
+If admission remains busy, or the local queue is full, access fails with
+`REPOSITORY_BUSY` and the independent `onHealth` sink receives that fixed code.
+No data or receipt is invented when an intent could not be saved. The host must
+retain this alert outside the refused repository and account for the unsaved
+slot as a gap. Other storage errors are not treated as lock contention. The
+library retries **only admission**: it never repeats publication, a transaction
+body, cleanup side effects, commit acknowledgement or an uncertain HTTP send.
 Same-turn scalar reads are grouped into chunks of at most 256 (at most 8,192
 queued references), so existing parallel loaders work without one inflate per
 point. A refused bulk read is isolated per reference; an expired item cannot

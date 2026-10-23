@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Retained repositories now wait asynchronously for bounded SQLite transaction
+  admission, including first-open setup, so overlapping cleanup and publication
+  do not fail immediately on a short lock. Exhausted admission and a full local
+  queue emit a fixed busy health event. Publication and uncertain writes are
+  never automatically retried.
+
 ## [0.9.0] - 2026-10-21
 
 ### Added

@@ -4,6 +4,11 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { RepositoryRetentionError, type RepositoryRetentionReceipt } from './contracts.js';
 export interface Row extends RepositoryRetentionReceipt { fingerprint: string; writeHash: string }
+function isBusy(error: unknown): boolean {
+  if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return false;
+  const code: unknown = Object.getOwnPropertyDescriptor(error, 'errcode')?.value;
+  return typeof code === 'number' && ((code & 255) === 5 || (code & 255) === 6);
+}
 /** Content-free durable ownership, pending intents and expiry tombstones. */
 export class RepositoryLedger {
   private readonly db: DatabaseSync;
@@ -22,11 +27,14 @@ export class RepositoryLedger {
       if (policy.version !== 1 || policy.retentionMs !== retentionMs) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
     } catch (error) {
       this.db.close();
-      if (Object.getOwnPropertyDescriptor(error, 'errcode')?.value === 5) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+      if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
       throw error;
     }
   }
-  begin(): void { try { this.db.exec('BEGIN IMMEDIATE'); } catch { throw new RepositoryRetentionError('REPOSITORY_BUSY'); } }
+  begin(): void {
+    try { this.db.exec('BEGIN IMMEDIATE'); }
+    catch (error) { if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY'); throw error; }
+  }
   commit(): void { this.db.exec('COMMIT'); }
   rollback(): void { this.db.exec('ROLLBACK'); }
   row(hash: string): Row | undefined {

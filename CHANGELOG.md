@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Optional verified-uptime expiry for new retained namespaces. A persisted
+  elapsed-age checkpoint prevents wall-clock corrections and unobserved restart
+  downtime from expiring data early. Legacy readers are fenced; existing data
+  and wall-clock namespaces are not converted.
+
 - Retained repositories now wait asynchronously for bounded SQLite transaction
   admission, including first-open setup, so overlapping cleanup and publication
   do not fail immediately on a short lock. Exhausted admission and a full local

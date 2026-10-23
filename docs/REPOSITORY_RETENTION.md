@@ -1,5 +1,48 @@
 # Opt-in retained filesystem repository
 
+## Optional verified-uptime expiry for new namespaces
+
+Set `expiryClock: 'verified-uptime'` to use elapsed time for expiry instead of
+wall time. The default remains the existing wall-clock format. No existing
+namespace is adopted or converted. Reader-first rollout is required.
+
+This profile saves one elapsed-age high-water mark in the existing repository
+ledger. Each handle adds only its own observed monotonic duration to the age
+at opening; transactions take the maximum of that value and the durable value.
+Two handles do not sum the same time interval. Only committed checkpoints count
+after restart. Unobserved downtime is **not credited**: retention may be longer
+than the configured period, never shorter because the wall clock jumped.
+This is not a promise to delete at a particular civil time after downtime.
+
+`clock` still records the host's observed wall acceptance timestamp.
+`acceptedAt` and `expiresAt` retain that nominal wall-time pair; they do not
+decide deletion in this profile. Its receipts additionally name `expiryClock`,
+`acceptedAgeMs` and `expiresAgeMs`. Source timestamps, file mtime, time zones
+and DST do not decide age. A late wall correction changes no saved input/ref.
+
+The elapsed source defaults to Node's `performance.now()`. `monotonicClock` is
+a trusted host/test port, never model input; a wrapper over a wall clock is not
+a valid implementation. Backward, nonfinite and overflowing elapsed readings
+refuse access and emit `REPOSITORY_CLOCK_UNAVAILABLE`, with fixed text only.
+No deletion or automatic clock reset follows such a refusal.
+
+New namespaces use `retention-v2.sqlite` with a separate legacy-format fence at
+`retention.sqlite`. Old constructors reject that fence without opening the real
+elapsed-age ledger. An already opened legacy namespace cannot be converted.
+Losing a fence is unconfirmed storage, not permission to initialize over old IDs.
+The profile uses SQLite DELETE journals and EXTRA synchronization; the old WAL
+profile is unchanged. This is no new attempt journal, history-retirement policy
+or source-ownership lock. Restoring a stale backup cannot prove the latest age;
+restore/admission fencing and retained-history limits need their own policy.
+
+The clock/restart tests use actual repository reads, cleanup and the exact
+0.9.0 constructor witness. They assert that saved values, references and native
+publication fingerprints remain identical before expiry. Neither this profile
+nor those synthetic tests establish fleet capacity or production activation.
+
+Runtime references: [Node performance clock](https://nodejs.org/api/perf_hooks.html#performancenow),
+[SQLite journal and synchronization rules](https://www.sqlite.org/pragma.html).
+
 This is a managed **new namespace**, not adoption of existing data. The default
 filesystem repository and existing packed records are unchanged. Nothing starts
 a timer, sets a retention policy for an app, or runs cleanup automatically.

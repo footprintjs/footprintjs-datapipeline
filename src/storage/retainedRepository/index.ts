@@ -23,16 +23,16 @@ export class RetainedFilesystemRepository implements Repository {
   constructor(private readonly options: RetainedRepositoryOptions) { checkOptions(options); this.options = Object.freeze({ ...options }); }
   private fresh = (row: Row): void => {
     const now = time(this.options);
-    if (row.status === 'expired' || row.expiresAt <= now) {
+    if (this.ledger!.expiredAt(row, now)) {
       this.ledger!.expired(row.operationHash);
       throw new RepositoryRetentionError('REPOSITORY_EXPIRED');
     }
-    if (now < row.acceptedAt) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+    if (this.ledger!.wallBased() && now < row.acceptedAt) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
   };
   private async ready(): Promise<void> {
     if (this.ledger) return;
     this.path = await readyDirectory(this.options);
-    this.ledger = new RepositoryLedger(this.path, this.options.retentionMs);
+    this.ledger = new RepositoryLedger(this.path, this.options.retentionMs, this.options);
     const { IndexedData } = await import('./indexedData.js');
     this.data = new IndexedData(this.path, refs => readOwned(refs, this.ledger!, this.data!, this.fresh, this.publishing));
   }
@@ -40,8 +40,8 @@ export class RetainedFilesystemRepository implements Repository {
     try { return await this.serial.run(() => this.transaction(fn)); }
     catch (error) {
       const code = error instanceof RepositoryRetentionError || error instanceof FilesystemRepositoryError ? error.code : undefined;
-      if (code === 'REPOSITORY_BUSY' || code === 'REPOSITORY_UNCONFIRMED' || code === 'storage_corrupt') {
-        try { void Promise.resolve(this.options.onHealth({ code: code === 'REPOSITORY_BUSY' ? code : 'REPOSITORY_UNCONFIRMED' })).catch(() => {}); }
+      if (code === 'REPOSITORY_BUSY' || code === 'REPOSITORY_CLOCK_UNAVAILABLE' || code === 'REPOSITORY_UNCONFIRMED' || code === 'storage_corrupt') {
+        try { void Promise.resolve(this.options.onHealth({ code: code === 'storage_corrupt' ? 'REPOSITORY_UNCONFIRMED' : code })).catch(() => {}); }
         catch { /* An independent health sink cannot change a storage outcome. */ }
       }
       throw error;
@@ -88,8 +88,9 @@ export class RetainedFilesystemRepository implements Repository {
   receipt(id: string): Promise<RepositoryRetentionReceipt | undefined> {
     return this.exclusive(async () => {
       const row = this.ledger!.row(operationHash(id)); if (!row) return undefined;
-      if (row.expiresAt <= time(this.options)) this.ledger!.expired(row.operationHash);
-      return { operationHash: row.operationHash, acceptedAt: row.acceptedAt, expiresAt: row.expiresAt, status: this.ledger!.row(row.operationHash)!.status, publication: row.publication, dataDeleted: row.dataDeleted };
+      if (this.ledger!.expiredAt(row, time(this.options))) this.ledger!.expired(row.operationHash);
+      return { operationHash: row.operationHash, acceptedAt: row.acceptedAt, expiresAt: row.expiresAt, status: this.ledger!.row(row.operationHash)!.status, publication: row.publication, dataDeleted: row.dataDeleted,
+        ...(row.expiryClock ? { expiryClock: row.expiryClock, acceptedAgeMs: row.acceptedAgeMs!, expiresAgeMs: row.expiresAgeMs! } : {}) };
     });
   }
   async sweep(options: { limit: number }): Promise<{ deleted: number }> {

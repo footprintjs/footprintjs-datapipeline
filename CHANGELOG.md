@@ -2,6 +2,10 @@
 
 ## [0.9.0] - 2026-10-21
 
+### Performance
+
+- Guarded trace storage reuses one validated canonical encoding and one compressed buffer through reservation and synced publication. Logical records, content hashes, read validation, disk limits, expiry receipts and publication ordering are unchanged. No evidence is sampled or discarded.
+
 ### Added
 
 - Optional retained filesystem repository for new namespaces: explicit retention period, pending intent/recovery, exact packed records, hashed ownership index, bounded read batching, expired references and durable tombstones before bounded cleanup. No automatic policy, timer, migration, repository disk quota or activation.

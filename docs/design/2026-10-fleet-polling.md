@@ -29,6 +29,12 @@ Remove this draft's proposed fleet journal, durable cursor and SQLite outcome
 tables. Deterministic, bounded slot lookup meets recovery needs without them.
 The exclusive owner guard is coordination, never another attempt history.
 
+The shared ownership decision now makes bounded store admission and real
+cleanup/poll overlap proof prerequisites. A lifetime source-owner lock prevents
+duplicate dispatch; it does not fix retention-store lock contention. #25 is a
+proposed library fix, not an already released capability. Keep this a draft and
+settle both contracts before building a coordinator.
+
 ## 2. Fixed source offsets and identities
 
 Options: recompute even spacing from fleet size, hash source identity, or assign

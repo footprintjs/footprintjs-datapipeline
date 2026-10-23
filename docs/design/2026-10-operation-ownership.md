@@ -63,6 +63,44 @@ does not require another fleet intent database or another fact before every poll
 Conflicting attempts, unconfirmed publication and expired supporting facts fail
 safe; neither a cache nor an owner lock can convert them to success.
 
+## Store admission is a prerequisite, not another attempt owner
+
+The cleanup/poll overlap reproduction shows that datapipeline 0.9.0 refuses
+SQLite admission immediately. A separate worker does not prevent that failure.
+[Datapipeline #25](https://github.com/footprintjs/footprintjs-datapipeline/pull/25)
+proposes a bounded asynchronous wait in the retained store itself, including
+first-open schema admission. It is unmerged and unreleased. Neither design may
+be implemented on the assumption that this behavior is already available.
+
+Use that one library admission policy for poll, cleanup, manifest and writer
+event operations. Never add app retries around `collect`, `derive`, native
+publication or an uncertain send. The one-second proposal bounds admission to
+each transaction; it does not bound queue time, I/O, a whole poll or fleet
+capacity. Keep the fixed local queue bound. Exhaustion emits a fixed independent
+health event; a failed intent save cannot invent a receipt.
+
+The repository remains the sole authority for attempted/published facts. If a
+post-capture save is unconfirmed, keep that outcome unknown and reconcile only
+through the repository; do not repeat acquisition to manufacture a receipt. If
+a dispatch refusal cannot itself be saved, health reports the unsaved slot and
+its scheduled identity, while later summaries show no saved poll. Do not turn
+that alert into a second authoritative attempt journal or a claim that the
+device was never contacted. A saved raw input without compact publication is
+still not a completed compact poll.
+
+Required first-slice proof: overlap the **actual** cleanup worker and repository
+with independent poll/writer saves and first-open readers. Release a short lock
+and reopen every acknowledged receipt; hold it past admission and prove fixed
+health, no invented receipt, no automatic device/send retry, and honest gaps.
+Also hold publication after its side effects start and prove the body is never
+replayed. Separate this from actual host capacity measurements: the serial
+storage study alternates poll and sweep, and does not meet this requirement.
+
+Expiry receipts distinguish retention elapsed from confirmed payload deletion.
+A `dataDeleted: false` receipt cannot prove removal. Bounded metadata history,
+forward-clock/restart safety, and concurrent cleanup latency remain deployment
+gates; the drafts select no history horizon or activation policy.
+
 ## Exclusive ownership is a separate guard
 
 The current retained repository uses short SQLite `BEGIN IMMEDIATE` transactions.

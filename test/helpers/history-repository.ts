@@ -53,3 +53,12 @@ export async function scopedWrite(repository: NonNullable<ReturnType<typeof crea
     batch: { ...seed.batch, operationId, ref: batchRef, evidenceRef, observationRefs: observations.map(item => item.ref) },
     evidence: { ...seed.evidence, operationId, ref: evidenceRef, outputRefs: [batchRef, ...observations.map(item => item.ref)] } };
 }
+
+/** Drain the explicit maintenance API; each transaction remains a bounded batch. */
+export async function drainHistory(repository: NonNullable<ReturnType<typeof createRetainedFilesystemRepository>>, limit = 100) {
+  for (let pass = 0; pass < 10000; pass++) {
+    const result = await repository.retireHistory({ limit });
+    if (!result.pending || result.blocked) return result;
+  }
+  throw Error('History maintenance did not converge');
+}

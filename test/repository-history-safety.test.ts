@@ -5,7 +5,7 @@ import { createRetainedFilesystemRepository, FilesystemRepository } from '../src
 import { RepositoryLedger } from '../src/storage/retainedRepository/ledger.js';
 import { RepositoryLedger as LegacyLedger } from './fixtures/retained-reader-0.9/ledger.js';
 import { DatabaseSync } from 'node:sqlite';
-import { DAY, namespaceId, fixture, request, scopedWrite } from './helpers/history-repository.js';
+import { DAY, namespaceId, fixture, request, scopedWrite, drainHistory } from './helpers/history-repository.js';
 
 afterEach(() => { vi.restoreAllMocks(); });
 it.each(['retired_history', 'operations', 'elapsed_clock', 'policy'])('refuses missing active authority table %s rather than recreating empty facts', async table => {
@@ -13,11 +13,11 @@ it.each(['retired_history', 'operations', 'elapsed_clock', 'policy'])('refuses m
   try {
     const saved = await first.pipeline.collect(request('saved'));
     f.at(8 * DAY); await first.repository.sweep({ limit: 100 }); first.repository.close();
-    const db = new DatabaseSync(join(f.directory, 'retention-v3.sqlite'));
+    const db = new DatabaseSync(join(f.directory, 'retention-v4.sqlite'));
     try { db.exec(`DROP TABLE ${table}`); } finally { db.close(); }
     const reopened = f.open(8);
     await expect(reopened.repository.findOperation(saved.commit.operationId)).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
-    const inspect = new DatabaseSync(join(f.directory, 'retention-v3.sqlite'));
+    const inspect = new DatabaseSync(join(f.directory, 'retention-v4.sqlite'));
     try { expect(inspect.prepare('SELECT name FROM sqlite_master WHERE type=\'table\' AND name=?').get(table)).toBeUndefined(); }
     finally { inspect.close(); }
   } finally { await f.close(); }
@@ -51,12 +51,12 @@ it('keeps the permanent floor while reclaiming exact rows in bounded batches and
     for (let i = 0; i < 6; i++) { const write = await scopedWrite(first.repository, 'row-' + i); await first.repository.commit(write); ids.push(write.operationId); }
     f.at(DAY); await first.repository.sweep({ limit: 100 });
     f.at(8 * DAY);
-    expect(await first.repository.retireHistory({ limit: 1 })).toEqual({ retireBefore: 1, reclaimedOperations: 1, blocked: false });
-    expect(await first.repository.metadataCapacity({ operations: 0, references: 0 })).toMatchObject({ operations: 5, references: 15 });
+    expect(await first.repository.retireHistory({ limit: 1 })).toMatchObject({ retireBefore: 0, verifiedOperations: 1, reclaimedOperations: 0, pending: true });
+    expect(await first.repository.metadataCapacity({ operations: 0, references: 0 })).toMatchObject({ operations: 6, references: 18 });
     first.repository.close();
     const reopened = f.open(8);
+    await drainHistory(reopened.repository, 1);
     for (const id of ids) await expect(reopened.repository.findOperation(id)).rejects.toMatchObject({ code: 'REPOSITORY_HISTORY_UNAVAILABLE' });
-    for (let i = 0; i < 5; i++) expect((await reopened.repository.retireHistory({ limit: 1 })).reclaimedOperations).toBe(1);
     expect(await reopened.repository.metadataCapacity({ operations: 0, references: 0 })).toMatchObject({ operations: 0, references: 0 });
     expect(await reopened.repository.historyStatus()).toMatchObject({ retireBefore: 1, generation: 1, retiredOperations: 6, retiredReferences: 18 });
   } finally { await f.close(); }
@@ -76,16 +76,16 @@ it('requires physical deletion proof before retiring a period', async () => {
   } finally { await f.close(); }
 });
 
-it('never converts uncertain publication into deletion proof to meet the history deadline', async () => {
+it('keeps uncertainty distinct while retiring saves whose files were actually deleted', async () => {
   const f = await fixture(), first = f.open(0);
   try {
     const write = await scopedWrite(first.repository, 'uncertain');
     const native = vi.spyOn(FilesystemRepository.prototype, 'commit').mockRejectedValue(Error('private failure'));
     await expect(first.repository.commit(write)).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' }); native.mockRestore();
     f.at(8 * DAY); await first.repository.sweep({ limit: 100 });
-    expect(await first.repository.historyStatus()).toMatchObject({ retireBefore: 0 });
-    expect(await first.repository.receipt(write.operationId)).toMatchObject({ status: 'expired', publication: 'unconfirmed', dataDeleted: true });
-    expect(f.alerts).toContainEqual({ code: 'REPOSITORY_HISTORY_BLOCKED' });
+    expect(await first.repository.historyStatus()).toMatchObject({ retireBefore: 1, retiredUnconfirmedOperations: 1 });
+    await expect(first.repository.receipt(write.operationId)).rejects.toMatchObject({ code: 'REPOSITORY_HISTORY_UNAVAILABLE' });
+    expect(f.alerts).not.toContainEqual({ code: 'REPOSITORY_HISTORY_BLOCKED' });
   } finally { await f.close(); }
 });
 
@@ -111,10 +111,10 @@ it('fences legacy and non-retiring readers, and refuses a lost active ledger or 
     expect(() => new RepositoryLedger(f.directory, DAY, f.options)).toThrow(expect.objectContaining({ code: 'REPOSITORY_INVALID_OPTIONS' }));
     const foreign = createRetainedFilesystemRepository({ ...f.options, historyRetirement: { profile: 'daily-periods-v1', keepDays: 7, namespaceId: 'f'.repeat(32), period: 0, maxOperationBytes: 65536 } })!;
     try { await expect(foreign.findOperation(saved.commit.operationId)).rejects.toMatchObject({ code: 'REPOSITORY_INVALID_OPTIONS' }); } finally { foreign.close(); }
-    await unlink(join(f.directory, 'retention-v3.sqlite'));
+    await unlink(join(f.directory, 'retention-v4.sqlite'));
     const reopened = f.open(0);
     await expect(reopened.repository.findOperation(saved.commit.operationId)).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
-    await expect(access(join(f.directory, 'retention-v3.sqlite'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access(join(f.directory, 'retention-v4.sqlite'))).rejects.toMatchObject({ code: 'ENOENT' });
   } finally { await f.close(); }
 });
 
@@ -191,11 +191,11 @@ it.each(['policy', 'elapsed_clock', 'retired_history'])('refuses a missing activ
   const f = await fixture(), first = f.open(0);
   try {
     await first.pipeline.collect(request('saved')); f.at(8 * DAY); await first.repository.sweep({ limit: 100 }); first.repository.close();
-    const db = new DatabaseSync(join(f.directory, 'retention-v3.sqlite'));
+    const db = new DatabaseSync(join(f.directory, 'retention-v4.sqlite'));
     try { db.exec(`DELETE FROM ${table} WHERE id=1`); } finally { db.close(); }
     const reopened = f.open(8);
     await expect(reopened.repository.historyStatus()).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
-    const inspect = new DatabaseSync(join(f.directory, 'retention-v3.sqlite'));
+    const inspect = new DatabaseSync(join(f.directory, 'retention-v4.sqlite'));
     try { expect(inspect.prepare(`SELECT 1 FROM ${table} WHERE id=1`).get()).toBeUndefined(); } finally { inspect.close(); }
   } finally { await f.close(); }
 });

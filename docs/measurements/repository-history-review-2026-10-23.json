@@ -1,0 +1,241 @@
+{
+  "kind": "completed-metadata-volume-measurements",
+  "reviewedBase": "cbe88ac1425e39e73ecce227a6f3cce6bcb562ce",
+  "runtimeSnapshotSha256": "3659d237db0f109380e1a2188a852d0f04f26ac391c04dabbd7ccbad37f246f9",
+  "profiles": [
+    {
+      "name": "volume-3refs",
+      "command": "node --import tsx examples/measure-history-volume.ts 241920 10 3",
+      "runtime": "v24.21.0",
+      "reportSha256": "5f587ea83c769053ac42060bb48121c26bb0fe126b2e92fc8fdb140a2916bee2",
+      "dailyOperations": 241920,
+      "seededDays": 10,
+      "referencesPerOperation": 3,
+      "bulkSetup": {
+        "transactionOperations": 10000,
+        "connectionCacheKiB": 8192,
+        "productionConnectionUnchanged": true
+      },
+      "metadataAllowanceBytes": 12884901888,
+      "lock": {
+        "transactions": 16476,
+        "p95Ms": 19.08191700000316,
+        "maxMs": 581
+      },
+      "nativePublisher": {
+        "attempted": 436,
+        "saved": 436,
+        "failed": 0,
+        "failures": [],
+        "alerts": [],
+        "p95Ms": 194.87062499998137,
+        "maxMs": 688.4162919999944
+      },
+      "finalCheckpoint": {
+        "currentPeriod": 9,
+        "retireBefore": 2,
+        "generation": 2,
+        "retiredOperations": 483840,
+        "retiredReferences": 1451520,
+        "retiredUnconfirmedOperations": 484,
+        "checkpointSha256": "c33f10b26f408ac85183bbaebf9443f99e8d37f39b33de24141fa3fa7c1b94c9"
+      },
+      "finalLiveMembership": {
+        "operations": 1935796,
+        "references": 5807388
+      },
+      "maximumSampledRssBytes": 1134739456,
+      "periods": [
+        {
+          "period": 0,
+          "operations": 241920,
+          "references": 725760,
+          "mainLogicalBytes": 387334144,
+          "controlAllocatedBytes": 403116032
+        },
+        {
+          "period": 1,
+          "operations": 483840,
+          "references": 1451520,
+          "mainLogicalBytes": 776019968,
+          "controlAllocatedBytes": 788992000
+        },
+        {
+          "period": 2,
+          "operations": 725760,
+          "references": 2177280,
+          "mainLogicalBytes": 1168986112,
+          "controlAllocatedBytes": 1174867968
+        },
+        {
+          "period": 3,
+          "operations": 967680,
+          "references": 2903040,
+          "mainLogicalBytes": 1565110272,
+          "controlAllocatedBytes": 1577521152
+        },
+        {
+          "period": 4,
+          "operations": 1209600,
+          "references": 3628800,
+          "mainLogicalBytes": 1961861120,
+          "controlAllocatedBytes": 1963397120
+        },
+        {
+          "period": 5,
+          "operations": 1451520,
+          "references": 4354560,
+          "mainLogicalBytes": 2357403648,
+          "controlAllocatedBytes": 2366050304
+        },
+        {
+          "period": 6,
+          "operations": 1693440,
+          "references": 5080320,
+          "mainLogicalBytes": 2753634304,
+          "controlAllocatedBytes": 2768703488
+        },
+        {
+          "period": 7,
+          "operations": 1935360,
+          "references": 5806080,
+          "mainLogicalBytes": 3150508032,
+          "controlAllocatedBytes": 3154579456
+        },
+        {
+          "period": 8,
+          "operations": 1935796,
+          "references": 5807388,
+          "mainLogicalBytes": 3193253888,
+          "controlAllocatedBytes": 3204911104
+        },
+        {
+          "period": 9,
+          "operations": 1935796,
+          "references": 5807388,
+          "mainLogicalBytes": 3219165184,
+          "controlAllocatedBytes": 3221688320
+        }
+      ],
+      "scope": "Actual SQLite metadata and bounded retirement, bulk seeded to the stated volume. Files-gone states are seeded, not a payload-deletion/real-device/fleet-throughput benchmark. A separate process publishes real native records concurrently during the first retirement."
+    },
+    {
+      "name": "volume-4refs",
+      "command": "node --import tsx examples/measure-history-volume.ts 241920 1 4",
+      "runtime": "v24.21.0",
+      "reportSha256": "bc01a6ede0164f7cd314f3cccbb6896b85bf4f750fb2c546970cdc7dd9f86fd8",
+      "dailyOperations": 241920,
+      "seededDays": 1,
+      "referencesPerOperation": 4,
+      "bulkSetup": {
+        "transactionOperations": 10000,
+        "connectionCacheKiB": 8192,
+        "productionConnectionUnchanged": true
+      },
+      "metadataAllowanceBytes": 12884901888,
+      "lock": {
+        "transactions": 4862,
+        "p95Ms": 21.95916700000089,
+        "maxMs": 27.029249999992317
+      },
+      "nativePublisher": {
+        "attempted": 235,
+        "saved": 235,
+        "failed": 0,
+        "failures": [],
+        "alerts": [],
+        "p95Ms": 91.66224999999758,
+        "maxMs": 293.29604200000176
+      },
+      "finalCheckpoint": {
+        "currentPeriod": 8,
+        "retireBefore": 1,
+        "generation": 1,
+        "retiredOperations": 241920,
+        "retiredReferences": 967680,
+        "retiredUnconfirmedOperations": 242,
+        "checkpointSha256": "efb815e3ed7dd4c2bb291a78f409cebcdd1f050be1772bc4218e024a4093410f"
+      },
+      "finalLiveMembership": {
+        "operations": 235,
+        "references": 705
+      },
+      "maximumSampledRssBytes": 504889344,
+      "periods": [
+        {
+          "period": 0,
+          "operations": 241920,
+          "references": 967680,
+          "mainLogicalBytes": 483811328,
+          "controlAllocatedBytes": 487342080
+        },
+        {
+          "period": 8,
+          "operations": 235,
+          "references": 705,
+          "mainLogicalBytes": 496287744,
+          "controlAllocatedBytes": 504119296
+        }
+      ],
+      "scope": "Actual SQLite metadata and bounded retirement, bulk seeded to the stated volume. Files-gone states are seeded, not a payload-deletion/real-device/fleet-throughput benchmark. A separate process publishes real native records concurrently during the first retirement."
+    }
+  ],
+  "limits": "Not a real-device, payload-deletion, five-second fleet capacity or production memory test. Compact profile covers one old period, not eight-period size.",
+  "interruptedPriorRunCountedAsPass": false,
+  "runtimeSnapshotScope": "src/ and the scale measurement entrypoint/helpers; native fixture diagnostics are separate",
+  "nativeProfiles": [
+    {
+      "command": "node --import tsx examples/measure-laptop-history.ts 50 32 32",
+      "rowsPerOperation": 50,
+      "operationsPerDay": 8,
+      "simulatedDays": 32,
+      "publications": 256,
+      "plateau": {
+        "startsAtSimulatedDay": 16,
+        "minimumAllocatedBytes": 3059712,
+        "maximumAllocatedBytes": 3059712,
+        "rangeBytes": 0
+      },
+      "checkpoint": {
+        "currentPeriod": 31,
+        "retireBefore": 24,
+        "generation": 24,
+        "retiredOperations": 192,
+        "retiredReferences": 9984,
+        "retiredUnconfirmedOperations": 0,
+        "checkpointSha256": "df4f446111228e2938caaeda15b99ab0067e390a5f3dd3e3c07dae9aa853a263"
+      },
+      "scope": "Managed repository only, including files, directories and SQLite. No device, InfluxDB, external trace store, real polling cadence or fleet-capacity claim."
+    },
+    {
+      "command": "node --import tsx examples/measure-laptop-history.ts 256 64 32",
+      "rowsPerOperation": 256,
+      "operationsPerDay": 8,
+      "simulatedDays": 64,
+      "publications": 512,
+      "plateau": {
+        "startsAtSimulatedDay": 32,
+        "minimumAllocatedBytes": 12480512,
+        "maximumAllocatedBytes": 12480512,
+        "rangeBytes": 0
+      },
+      "checkpoint": {
+        "currentPeriod": 63,
+        "retireBefore": 56,
+        "generation": 56,
+        "retiredOperations": 448,
+        "retiredReferences": 115584,
+        "retiredUnconfirmedOperations": 0,
+        "checkpointSha256": "20a13dcf1c19e15e4bf1791b5a776d238d88f871c558eba1841dc86f924178e1"
+      },
+      "scope": "Managed repository only, including files, directories and SQLite. No device, InfluxDB, external trace store, real polling cadence or fleet-capacity claim."
+    }
+  ],
+  "shorterNativeTrial": {
+    "rowsPerOperation": 256,
+    "simulatedDays": 32,
+    "result": "failed initial plateau assumption",
+    "lateAllocatedRangeBytes": 1048576,
+    "cause": "APFS added a 1 MiB extent during small B-tree high-water growth; record membership/file counts stayed fixed. Extended fixture keeps the original 128 KiB threshold over four later history cycles."
+  }
+}

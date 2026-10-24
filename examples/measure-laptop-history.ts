@@ -37,8 +37,14 @@ try {
   for (let day = 0; day < days; day++) {
     age = day * DAY;
     const cleanupStart = performance.now(); await maintenance.sweep({ limit: 100 });
+    for (let pass = 0; ; pass++) {
+      const batch = await maintenance.retireHistory({ limit: 100 });
+      if (batch.blocked) throw Error('Deletion incomplete in fixture');
+      if (!batch.pending) break;
+      if (pass > 10000) throw Error('Maintenance did not converge');
+    }
     const maintenanceMs = performance.now() - cleanupStart;
-    const repository = open(day);
+    const repository = await maintenance.bindPeriod(day);
     const pipeline = createPipeline({ repository, sources: [{ ref: { id: 'synthetic', version: '1' }, adapterRef: { id: 'saved-data', version: '1' } }],
       adapters: [{ ref: { id: 'saved-data', version: '1' }, async collect() {
         calls++;
@@ -51,22 +57,25 @@ try {
       const result = await pipeline.collect({ sourceRef: { id: 'synthetic', version: '1' }, idempotencyKey: `day-${day}-poll-${poll}`, request: {} });
       if (result.commit.status !== 'committed') {
         console.error(JSON.stringify({ kind: 'refused-measurement', day, poll, rows, metadataMiB,
-          capacity: await repository.metadataCapacity({ operations: 0, references: 0 }), usage: await usage(directory), alerts }));
+          capacity: await maintenance.metadataCapacity({ operations: 0, references: 0 }), usage: await usage(directory), alerts }));
         throw Error(`Write refused at day ${day}, poll ${poll}; this is not a completed measurement.`);
       }
     }
-    const capacity = await repository.metadataCapacity({ operations: 0, references: 0 });
+    const capacity = await maintenance.metadataCapacity({ operations: 0, references: 0 });
     samples.push({ day, ...await usage(directory), operations: capacity.operations, references: capacity.references, maintenanceMs });
-    repository.close();
+
   }
   if (alerts.length) throw Error('Unexpected health event');
-  const settled = samples.slice(16), allocated = settled.map(sample => sample.allocated);
+  const plateauStart = Math.floor(days / 2), settled = samples.slice(plateauStart), allocated = settled.map(sample => sample.allocated);
   const range = Math.max(...allocated) - Math.min(...allocated);
-  if (range > 128 * 1024) throw Error(`Allocated bytes did not plateau: range ${range}`);
+  if (range > 128 * 1024) {
+    console.error(JSON.stringify({ kind: 'failed-native-plateau', rows, range, samples }, null, 2));
+    throw Error(`Allocated bytes did not plateau: range ${range}`);
+  }
   console.log(JSON.stringify({ kind: 'synthetic-local-history-cycles', runtime: process.version, cpuCount: cpus().length,
     hostMemoryBytes: totalmem(), rowsPerOperation: rows, simulatedDays: days, operationsPerDay: 8, syntheticAdapterCalls: calls,
     elapsedMs: performance.now() - start, rssStart, rssEnd: process.memoryUsage().rss, metadataLimits: options.metadataLimits,
-    plateau: { startsAtSimulatedDay: 16, minimumAllocatedBytes: Math.min(...allocated), maximumAllocatedBytes: Math.max(...allocated), rangeBytes: range }, keepDays: 7,
+    plateau: { startsAtSimulatedDay: plateauStart, minimumAllocatedBytes: Math.min(...allocated), maximumAllocatedBytes: Math.max(...allocated), rangeBytes: range }, keepDays: 7,
     maximumMaintenanceMs: Math.max(...samples.map(sample => sample.maintenanceMs)), checkpoint: await maintenance.historyStatus(),
     samples, scope: 'Managed repository only, including files, directories and SQLite. No device, InfluxDB, external trace store, real polling cadence or fleet-capacity claim.' }, null, 2));
 } finally { for (const handle of handles) handle.close(); await rm(directory, { recursive: true, force: true }); }

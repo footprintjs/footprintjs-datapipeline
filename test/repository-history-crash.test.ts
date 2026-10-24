@@ -5,7 +5,7 @@ import { readdir, access } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { DAY, fixture, scopedWrite, bytes, request } from './helpers/history-repository.js';
+import { DAY, fixture, scopedWrite, bytes, request, drainHistory } from './helpers/history-repository.js';
 async function killAt(directory: string, phase: string) {
   const child = fork(fileURLToPath(new URL('./helpers/history-crash-child.ts', import.meta.url)), [directory, phase],
     { execArgv: ['--import', 'tsx'], stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
@@ -25,7 +25,7 @@ it('resumes a killed first initialization without deleting a lock or resetting a
     const fence = new DatabaseSync(join(f.directory, 'retention.sqlite'));
     try { expect(fence.prepare('SELECT state FROM history_namespace WHERE id=1').get()).toMatchObject({ state: 'initializing' }); }
     finally { fence.close(); }
-    await expect(access(join(f.directory, 'retention-v3.sqlite'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(access(join(f.directory, 'retention-v4.sqlite'))).rejects.toMatchObject({ code: 'ENOENT' });
     const resumed = f.open(0);
     expect((await resumed.pipeline.collect(request('after-kill'))).commit.status).toBe('committed');
   } finally { if (child.exitCode === null && child.signalCode === null) { const exit = once(child, 'exit'); child.kill('SIGKILL'); await exit; } await f.close(); }
@@ -41,10 +41,11 @@ it.each(['before-commit', 'after-commit'])('keeps one durable fence after a real
     if (phase === 'before-commit') {
       expect(await reopened.repository.historyStatus()).toMatchObject({ retireBefore: 0, generation: 0 });
       expect(await reopened.repository.receipt(write.operationId)).toMatchObject({ dataDeleted: true });
-      await reopened.repository.retireHistory({ limit: 1 });
+      await drainHistory(reopened.repository, 1);
     }
     expect(await reopened.repository.historyStatus()).toMatchObject({ retireBefore: 1, generation: 1 });
     await expect(reopened.repository.findOperation(write.operationId)).rejects.toMatchObject({ code: 'REPOSITORY_HISTORY_UNAVAILABLE' });
+    await drainHistory(reopened.repository, 1);
     expect(await reopened.repository.metadataCapacity({ operations: 0, references: 0 })).toMatchObject({ operations: 0, references: 0 });
   } finally { await f.close(); }
 });
@@ -64,5 +65,19 @@ it('two killed retries retain one bounded stage, one intent, and the same frozen
     expect(await first.repository.commit(write)).toMatchObject({ status: 'committed', operationId: write.operationId });
     expect((await readdir(join(f.directory, 'operations'))).filter(name => name.startsWith('.stage-'))).toEqual([]);
     expect(await first.repository.read(write.observations[0]!.ref)).toEqual(write.observations[0]);
+  } finally { await f.close(); }
+});
+
+it('resumes a committed verification cursor after SIGKILL without double-counting it', async () => {
+  const f = await fixture(), first = f.open(0);
+  try {
+    const write = await scopedWrite(first.repository, 'cursor'); await first.repository.commit(write);
+    f.at(DAY); await first.repository.sweep({ limit: 100 }); f.at(8 * DAY);
+    await first.repository.historyStatus(); first.repository.close();
+    await killAt(f.directory, 'after-progress');
+    const resumed = f.open(8); expect(await resumed.repository.historyStatus()).toMatchObject({ retireBefore: 0, retiredOperations: 0 });
+    await drainHistory(resumed.repository, 1);
+    expect(await resumed.repository.historyStatus()).toMatchObject({ retireBefore: 1, retiredOperations: 1, retiredReferences: 3 });
+    await expect(resumed.repository.findOperation(write.operationId)).rejects.toMatchObject({ code: 'REPOSITORY_HISTORY_UNAVAILABLE' });
   } finally { await f.close(); }
 });

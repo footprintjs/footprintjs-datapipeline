@@ -31,7 +31,7 @@ export function time(options: RetainedRepositoryOptions): number {
 }
 export async function readyDirectory(options: RetainedRepositoryOptions): Promise<string> {
   const path = await prepareDirectory(options);
-  for (const name of ['retention-v2.sqlite', 'retention-v3.sqlite']) try {
+  for (const name of ['retention-v2.sqlite', 'retention-v3.sqlite', 'retention-v4.sqlite']) try {
     const info = await lstat(join(path, name));
     if (!info.isFile() || info.isSymbolicLink()) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
     try { await lstat(join(path, 'retention.sqlite')); }

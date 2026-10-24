@@ -22,10 +22,14 @@ try {
   } else if (phase === 'before-commit') {
     const retire = RepositoryLedger.prototype.retireHistory;
     Object.defineProperty(RepositoryLedger.prototype, 'retireHistory', { value: async function (this: RepositoryLedger, limit: number) {
-      retire.call(this, limit); return pause(); // floor + deletes are still uncommitted
+      const result = retire.call(this, limit);
+      return result.retireBefore > 0 ? pause() : result; // only the final floor transaction is paused
     } });
-    await repo.retireHistory({ limit: 1 });
+    while ((await repo.retireHistory({ limit: 1 })).retireBefore === 0) { /* bounded committed progress */ }
   } else if (phase === 'after-commit') {
+    while ((await repo.retireHistory({ limit: 1 })).retireBefore === 0) { /* bounded committed progress */ }
+    await pause();
+  } else if (phase === 'after-progress') {
     await repo.retireHistory({ limit: 1 }); await pause();
   } else {
     // A process-kill cut at stable stage creation, with a bounded partial file.

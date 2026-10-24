@@ -35,31 +35,31 @@ export class RepositoryLedger {
     }
     const history = options?.historyRetirement;
     if (history) this.historyPolicy = history;
-    const ledgerFile = history ? 'retention-v3.sqlite' : 'retention-v2.sqlite';
+    const ledgerFile = history ? 'retention-v4.sqlite' : 'retention-v2.sqlite';
     const path = join(directory, guarded ? ledgerFile : 'retention.sqlite');
     this.db = new DatabaseSync(path);
     try {
       chmodSync(path, 0o600);
       if (activeHistory) validateActiveHistory(this.db);
       if (guarded) {
-        this.db.exec(`PRAGMA page_size=4096; PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=0; BEGIN IMMEDIATE;
+        this.db.exec(`PRAGMA foreign_keys=ON; PRAGMA page_size=4096; PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=0; BEGIN IMMEDIATE;
           CREATE TABLE IF NOT EXISTS policy(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,retentionMs INTEGER NOT NULL,settings TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0,acceptedAgeMs INTEGER NOT NULL,expiresAgeMs INTEGER NOT NULL${history ? ',period INTEGER NOT NULL' : ''});
           CREATE INDEX IF NOT EXISTS expiry ON operations(expiresAgeMs) WHERE dataDeleted=0;
-          CREATE TABLE IF NOT EXISTS refs(refHash TEXT PRIMARY KEY,operationHash TEXT NOT NULL);
+          CREATE TABLE IF NOT EXISTS refs(refHash TEXT PRIMARY KEY,operationHash TEXT NOT NULL${history ? ' REFERENCES operations(operationHash)' : ''});
           CREATE TABLE IF NOT EXISTS elapsed_clock(id INTEGER PRIMARY KEY CHECK(id=1),ageMs INTEGER NOT NULL);`);
         const settings = JSON.stringify({ expiryClock: 'verified-uptime', ...(options.metadataLimits ? { metadataLimits: options.metadataLimits } : {}),
           ...(history ? { historyRetirement: { profile: history.profile, keepDays: history.keepDays, namespaceId: history.namespaceId, maxOperationBytes: history.maxOperationBytes } } : {}) });
-        const version = history ? 3 : 2;
+        const version = history ? 4 : 2;
         this.db.prepare('INSERT OR IGNORE INTO policy VALUES(1,?,?,?)').run(version, retentionMs, settings);
         const policy = this.db.prepare('SELECT * FROM policy WHERE id=1').get();
         if (policy?.version !== version || policy.retentionMs !== retentionMs || policy.settings !== settings) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
         this.db.exec('INSERT OR IGNORE INTO elapsed_clock VALUES(1,0)');
         this.age = new ElapsedAge(this.db, options.monotonicClock ?? (() => performance.now()));
         if (history) this.history = new HistoryLedger(this.db, history, () => this.age!.now(), hash => this.row(hash)!);
-        this.db.exec('COMMIT');
         if (options.metadataLimits) this.budget = new MetadataBudget(this.db, directory, options.metadataLimits, ledgerFile, !!history);
-        if (history) activateHistoryFence(DatabaseSync, directory, history.namespaceId);
+        this.db.exec('COMMIT');
+        if (history && !activeHistory) activateHistoryFence(DatabaseSync, directory, history.namespaceId);
         return;
       }
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=0;
@@ -78,7 +78,7 @@ export class RepositoryLedger {
     }
   }
   begin(): void {
-    try { this.budget?.checkFiles(); this.db.exec('BEGIN IMMEDIATE'); this.age?.begin(); }
+    try { this.db.exec('BEGIN IMMEDIATE'); this.budget?.checkFiles(); this.age?.begin(); }
     catch (error) {
       if (this.db.isTransaction) this.db.exec('ROLLBACK');
       if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
@@ -126,6 +126,7 @@ export class RepositoryLedger {
   private insertIntent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number, period?: number): void {
     if (this.age) {
       const age = this.age.now();
+      if (this.history && Math.floor(age / 86400_000) !== period) throw new RepositoryRetentionError('REPOSITORY_PERIOD_CLOSED');
       if (!Number.isSafeInteger(age + retentionMs)) throw new RepositoryRetentionError('REPOSITORY_CLOCK_UNAVAILABLE');
       const values = [hash, fingerprint, writeHash, now, now + retentionMs, age, age + retentionMs];
       if (this.history) values.push(period!);

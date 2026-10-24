@@ -11,9 +11,10 @@ import { readOwned } from './readOwned.js';
 import { prepareIntent, snapshotWrite, operationHash } from './commit.js';
 import { removeOperation } from './cleanup.js';
 import { admitTransaction } from './admission.js';
+import { setTimeout as maintenanceYield } from 'node:timers/promises';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { storageFailure, storageAlert } from './failure.js';
-import { operationId, reference } from './historyIdentity.js';
+import { scopedIdentity, scopedRepository } from './historyScope.js';
 import { removeHistoryStage } from './historyStaging.js';
 export * from './contracts.js';
 /** Explicit, packed, managed namespace. No timer, automatic resend or legacy adoption. */
@@ -32,11 +33,8 @@ export class RetainedFilesystemRepository implements Repository {
       maxBytes: options.metadataLimits.maxBytes, maxOperations: options.metadataLimits.maxOperations, maxReferences: options.metadataLimits.maxReferences,
     }) } : {}), ...(options.historyRetirement ? { historyRetirement: Object.freeze({ ...options.historyRetirement }) } : {}) });
     const policy = this.options.historyRetirement;
-    if (policy) this.identity = Object.freeze({
-      operationId: (logicalId: string) => operationId(policy, logicalId),
-      assertOperation: (id: string, intent: 'lookup' | 'admit') => this.exclusive(async () => { this.ledger!.checkOperation(id, intent); }),
-      reference: <K extends RecordRef['kind']>(id: string, kind: K, key: string) => reference(policy, id, kind, key),
-    });
+    if (policy) this.identity = scopedIdentity(policy,
+      (id, intent) => this.exclusive(async () => { this.ledger!.checkOperation(id, intent); }));
   }
   private fresh = (row: Row): void => {
     const now = time(this.options);
@@ -77,6 +75,14 @@ export class RetainedFilesystemRepository implements Repository {
       const safe = failure instanceof RepositoryRetentionError || failure instanceof FilesystemRepositoryError ? failure : new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
       throw safe;
     }
+  }
+  /** Explicit new-work scope over the same open connection. Never changes old retry IDs. */
+  bindPeriod(period: number): Promise<Repository> {
+    return this.exclusive(async () => {
+      if (!this.options.historyRetirement || !Number.isSafeInteger(period) || period < 0) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+      if (period !== this.ledger!.historyStatus().currentPeriod) throw new RepositoryRetentionError('REPOSITORY_PERIOD_CLOSED');
+      return scopedRepository(this, scopedIdentity({ ...this.options.historyRetirement, period }, this.identity!.assertOperation));
+    });
   }
   read(ref: RecordRef) { return this.reads.read(ref); }
   /** A snapshot for host preflight, not a reservation or publication promise. */
@@ -139,13 +145,17 @@ export class RetainedFilesystemRepository implements Repository {
     } finally { this.cleanupRunning = false; }
   }
   historyStatus() { return this.exclusive(async () => this.ledger!.historyStatus()); }
-  retireHistory(options: { limit: number }) {
+  async retireHistory(options: { limit: number }) {
     if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
-    return this.exclusive(async () => {
+    const result = await this.exclusive(async () => {
       const result = this.ledger!.retireHistory(options.limit);
       if (result.blocked) storageAlert(this.options, 'REPOSITORY_HISTORY_BLOCKED');
       return result;
     });
+    // Yield outside the transaction/serial owner, so a draining worker does not
+    // reacquire the lock continuously ahead of another process's admission retry.
+    if (result.pending && !result.blocked) await maintenanceYield(5);
+    return result;
   }
   close(): void { if (this.cleanupRunning || this.serial.pending || this.reads.busy) throw new RepositoryRetentionError('REPOSITORY_BUSY'); this.ledger?.close(); delete this.ledger; delete this.data; }
 }

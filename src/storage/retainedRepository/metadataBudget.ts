@@ -57,9 +57,9 @@ export class MetadataBudget {
     if (![request.operations, request.references].every(value => Number.isSafeInteger(value) && value >= 0)) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
     // Legacy tables are append-only. The opt-in retirement format reuses rows,
     // so max(rowid) must never be interpreted as its live membership count.
-    const count = this.reclaiming ? 'count(*)' : 'coalesce(max(rowid),0)';
-    const operations = Number(this.db.prepare(`SELECT ${count} AS n FROM operations`).get()!.n);
-    const references = Number(this.db.prepare(`SELECT ${count} AS n FROM refs`).get()!.n);
+    const counts = this.reclaiming ? this.db.prepare('SELECT operations,refs FROM history_counts WHERE id=1').get() : undefined;
+    const operations = Number(this.reclaiming ? counts?.operations : this.db.prepare('SELECT coalesce(max(rowid),0) AS n FROM operations').get()!.n);
+    const references = Number(this.reclaiming ? counts?.refs : this.db.prepare('SELECT coalesce(max(rowid),0) AS n FROM refs').get()!.n);
     if (![operations, references].every(value => Number.isSafeInteger(value) && value >= 0) ||
       operations > this.limits.maxOperations || references > this.limits.maxReferences) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
     const pages = Number(this.db.prepare('PRAGMA page_count').get()!.page_count);

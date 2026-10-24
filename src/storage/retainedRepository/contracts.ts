@@ -1,5 +1,5 @@
 export const RETAINED_REPOSITORY_SAFETY_VERSION = 1;
-export const REPOSITORY_HISTORY_VERSION = 1;
+export const REPOSITORY_HISTORY_VERSION = 2;
 export type RepositoryRetentionCode = 'REPOSITORY_INVALID_OPTIONS' | 'REPOSITORY_UNMANAGED' | 'REPOSITORY_BUSY' | 'REPOSITORY_EXPIRED' | 'REPOSITORY_UNCONFIRMED' | 'REPOSITORY_CLOCK_UNAVAILABLE' | 'REPOSITORY_METADATA_LIMIT' | 'REPOSITORY_HISTORY_UNAVAILABLE' | 'REPOSITORY_PERIOD_CLOSED' | 'REPOSITORY_HISTORY_BLOCKED';
 export interface RepositoryHistoryPolicy {
   readonly profile: 'daily-periods-v1';
@@ -18,6 +18,8 @@ export interface RepositoryHistoryStatus {
   readonly generation: number;
   readonly retiredOperations: number;
   readonly retiredReferences: number;
+  /** Publication was uncertain; only physical deletion is confirmed. */
+  readonly retiredUnconfirmedOperations: number;
   readonly checkpointSha256: string;
 }
 export interface RepositoryMetadataLimits {

@@ -7,7 +7,12 @@
   fencing, cumulative checkpoints, bounded row reclamation and reusable metadata
   capacity. The laptop example keeps seven days. Stable managed staging bounds
   interrupted retries. Existing stores/IDs and defaults are unchanged; no timer,
-  migration, deployment or source-authenticity claim is added.
+  migration, deployment or source-authenticity claim is added. Whole-period
+  verification now resumes through bounded transactions, including unconfirmed
+  saves whose files are confirmed gone; uncertainty is counted separately.
+  Transactional membership counters avoid admission scans. New work can bind a
+  new period without reopening storage or changing previous retry IDs. The
+  revised private ledger uses format v4 and refuses earlier v3 namespaces.
 
 - Optional immutable operation, reference and SQLite control-file limits for
   new verified-uptime retained namespaces. Exhaustion refuses new identities
@@ -15,7 +20,8 @@
   snapshot, not a reservation or a payload/disk quota. No period retirement,
   default limit, migration or automatic activation is added.
   This is an emergency admission guard only: metadata growth is not reduced,
-  and sealed-period integration remains a required, unimplemented readiness gate.
+  without the separate opt-in finite-history profile. Host integration and
+  sustained maintenance capacity remain readiness gates.
   A native ledger-intent `SQLITE_FULL` reports the limit; unrelated publication
   failures keep their unconfirmed meaning.
 

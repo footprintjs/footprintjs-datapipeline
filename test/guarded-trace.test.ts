@@ -1,13 +1,19 @@
 import { mkdtemp, mkdir, realpath, readdir, rm, readFile, writeFile, unlink, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, parse } from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createGuardedFilesystemTraceStore } from '../src/storage/guardedTrace/index.js';
-const disk = vi.hoisted(() => ({ free: 10_000_000_000n, failTrace: false, failDelete: false, block: undefined as Promise<void> | undefined, onStart: undefined as (() => void) | undefined }));
+const disk = vi.hoisted(() => ({ free: 10_000_000_000n, failTrace: false, failDelete: false, block: undefined as Promise<void> | undefined, onStart: undefined as (() => void) | undefined, deviceOf: undefined as ((path: string) => number) | undefined }));
 vi.mock('node:fs/promises', async original => {
  const actual = await original<typeof import('node:fs/promises')>();
  return { ...actual,
   statfs: async () => ({ bsize: 4096n, bavail: disk.free / 4096n }),
+  stat: async (...args: Parameters<typeof actual.stat>) => {
+   const info = await actual.stat(...args);
+   // Temp directories can live on a separate device in hosted CI. Control only
+   // the device relation; existence, permissions and real file I/O stay real.
+   return disk.deviceOf ? Object.assign(info, { dev: disk.deviceOf(String(args[0])) }) : info;
+  },
   open: async (...args: Parameters<typeof actual.open>) => {
    if (String(args[0]).endsWith('/trace.json')) {
     disk.onStart?.(); if (disk.block) await disk.block;
@@ -22,11 +28,11 @@ vi.mock('node:fs/promises', async original => {
  };
 });
 const folders: string[] = [], stores: { close(): void }[] = [];
-afterEach(async () => { for (const s of stores.splice(0)) s.close(); for (const p of folders.splice(0)) await rm(p, { recursive: true, force: true }); disk.free = 10_000_000_000n; disk.failTrace = false; disk.failDelete = false; disk.block = undefined; disk.onStart = undefined; });
-async function host(extra = {}) {
+afterEach(async () => { for (const s of stores.splice(0)) s.close(); for (const p of folders.splice(0)) await rm(p, { recursive: true, force: true }); disk.free = 10_000_000_000n; disk.failTrace = false; disk.failDelete = false; disk.block = undefined; disk.onStart = undefined; disk.deviceOf = undefined; });
+async function host(extra = {}, filesystemPolicy: { requireSeparateFilesystem?: boolean } = { requireSeparateFilesystem: false }) {
  const directory = await realpath(await mkdtemp(join(tmpdir(), 'guarded-trace-'))); folders.push(directory);
  let now = Date.parse('2026-10-20T12:00:00Z'); const health: unknown[] = [];
- const options = { enabled: true, directory, maxTraceBytesOnDisk: 8 * 1024 * 1024, warningAtBytes: 4 * 1024 * 1024, minFreeBytes: 1024 * 1024, receiptReserveBytes: 16 * 1024 * 1024, requireSeparateFilesystem: false, clock: () => now, onHealth: (event: unknown) => { health.push(event); }, ...extra };
+ const options = { enabled: true, directory, maxTraceBytesOnDisk: 8 * 1024 * 1024, warningAtBytes: 4 * 1024 * 1024, minFreeBytes: 1024 * 1024, receiptReserveBytes: 16 * 1024 * 1024, ...filesystemPolicy, clock: () => now, onHealth: (event: unknown) => { health.push(event); }, ...extra };
  const store = createGuardedFilesystemTraceStore(options)!; stores.push(store);
  return { store, options, health, directory, advance: (ms: number) => { now += ms; } };
 }
@@ -40,10 +46,24 @@ it('keeps complete gzip traces and small receipts, reopening through a fresh ins
  const second = createGuardedFilesystemTraceStore(f.options)!; stores.push(second);
  expect(await second.read(ref)).toEqual(trace());
 });
-it('refuses root-filesystem storage by default before creating evidence files', async () => {
- const f = await host({ requireSeparateFilesystem: true });
+it.each([undefined, true])('refuses matching root/ancestor devices before creating evidence files (separate filesystem: %s)', async requireSeparateFilesystem => {
+ disk.deviceOf = () => 1;
+ const f = requireSeparateFilesystem === undefined ? await host({}, {}) : await host({ requireSeparateFilesystem });
  await expect(f.store.store(trace())).rejects.toMatchObject({ code: 'TRACE_UNSAFE_FILESYSTEM' });
  expect(await readdir(f.directory)).toEqual([]);
+});
+it.each([undefined, true])('allows different root/ancestor devices (separate filesystem: %s)', async requireSeparateFilesystem => {
+ disk.deviceOf = path => path === parse(path).root ? 1 : 2;
+ const f = requireSeparateFilesystem === undefined ? await host({}, {}) : await host({ requireSeparateFilesystem });
+ const ref = await f.store.store(trace());
+ expect(await f.store.read(ref)).toEqual(trace());
+ expect(await f.store.receipt(ref)).toMatchObject({ status: 'stored' });
+});
+it('allows matching devices only with the explicit host exception', async () => {
+ disk.deviceOf = () => 1;
+ const f = await host({ requireSeparateFilesystem: false });
+ const ref = await f.store.store(trace());
+ expect(await f.store.read(ref)).toEqual(trace());
 });
 it('records a fixed pressure gap and alerts without saving a full trace', async () => {
  const f = await host(); disk.free = 1n;

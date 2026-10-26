@@ -1,5 +1,12 @@
 # Finite-history review: workload and measurement contract
 
+**Historical measurements:** the recorded results below predate the acceptance-
+revision clock repair. They have not been rerun against format 6. The repaired
+clock can discard ambiguous intervals across alternating publishers, delaying
+expiry and retirement without a minimum progress rate. These figures therefore
+do not establish wall-time capacity for that workload on the repaired clock.
+The current automated small history fixtures are separate verification.
+
 This revision addresses whole-day write-lock scans and indefinite blocking by
 unconfirmed saves. Small native cause/expiry/crash fixtures remain separate from
 metadata scale and from real collector capacity. No production deployment is

@@ -18,9 +18,12 @@ continuous local clock without changing the revision. Overlapping handle
 intervals are never summed.
 
 Only committed checkpoints count after restart. Failed transactions and refused
-final commits discard their local interval; successful commits preserve local
-fractional time. Acceptance rounds upward and expiry age rounds downward to
-avoid charging a preceding fractional millisecond to newly accepted data.
+final commits discard their staged checkpoint and acceptance revision. A live
+handle retains its earlier committed clock anchor, subject to the next durable
+revision check; a rollback cannot erase verified time or adopt a failed new
+acceptance. Successful commits preserve local fractional time. Acceptance
+rounds upward and expiry age rounds downward to avoid charging a preceding
+fractional millisecond to newly accepted data.
 Unobserved downtime is **not credited**. Clock origins need not agree between
 processes, and neither wall timestamps nor a platform boot clock repair gaps.
 

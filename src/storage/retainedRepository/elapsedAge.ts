@@ -72,9 +72,10 @@ export class ElapsedAge {
     this.accepted = false;
   }
   rolledBack(): void {
-    // Failed work (including a refused final COMMIT) establishes no new clock
-    // authority. Drop its entire interval and retain the backward-clock check.
-    this.anchor = this.transaction = this.pending = undefined;
+    // Failed work establishes no new clock authority. Retain only the anchor
+    // from before this transaction; begin() rechecks its acceptance revision.
+    // A foreign or uncertain committed acceptance therefore still rebases it.
+    this.transaction = this.pending = undefined;
     this.accepted = false;
   }
 }

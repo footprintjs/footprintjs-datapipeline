@@ -102,7 +102,7 @@ it('reopens only committed age and drops a surviving handle interval spanning th
   } finally { await f.close(); }
 });
 
-it('discards a rolled-back interval even without a foreign writer and retains backward-clock checks', async () => {
+it('retains earlier verified time after rollback without committing failed work or resetting backward-clock checks', async () => {
   const f = await fixture(), repo = f.open(), write = candidate('rollback-interval');
   try {
     await repo.commit(write); f.at(30); await repo.read(write.batch.ref);
@@ -112,10 +112,45 @@ it('discards a rolled-back interval even without a foreign writer and retains ba
     expect(f.saved().ageMs).toBe(30);
     f.at(59);
     await expect(repo.sweep({ limit: 1 })).rejects.toMatchObject({ code: 'REPOSITORY_CLOCK_UNAVAILABLE' });
-    f.at(100); expect(await repo.read(write.batch.ref)).toEqual(write.batch);
-    expect(f.saved().ageMs).toBe(30);
-    f.at(169); expect(await repo.sweep({ limit: 1 })).toEqual({ deleted: 0 });
-    f.at(170); expect(await repo.sweep({ limit: 1 })).toEqual({ deleted: 1 });
+    f.at(99); expect(await repo.read(write.batch.ref)).toEqual(write.batch);
+    expect(f.saved().ageMs).toBe(99);
+    f.at(100); expect(await repo.sweep({ limit: 1 })).toEqual({ deleted: 1 });
+  } finally { await f.close(); }
+});
+
+it.each([false, true])('rechecks authority after a new-intent COMMIT throws (durable COMMIT happened: %s)', async durable => {
+  const f = await fixture(), repo = f.open(), write = candidate('before-failed-intent');
+  const failed = candidate('failed-intent');
+  try {
+    await repo.commit(write); f.at(30); await repo.read(write.batch.ref);
+    const before = f.saved(), exec = DatabaseSync.prototype.exec;
+    const native = vi.spyOn(FilesystemRepository.prototype, 'commit');
+    let failCommit = true;
+    const fault = vi.spyOn(DatabaseSync.prototype, 'exec').mockImplementation(function (this: InstanceType<typeof DatabaseSync>, sql) {
+      if (sql === 'COMMIT' && failCommit) {
+        failCommit = false;
+        if (durable) exec.call(this, sql);
+        throw Object.assign(Error('uncertain final COMMIT'), { errcode: 10 });
+      }
+      return exec.call(this, sql);
+    });
+    f.at(60);
+    await expect(repo.commit(failed)).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
+    fault.mockRestore();
+    expect(native).not.toHaveBeenCalled();
+    if (durable) {
+      expect(f.saved()).toEqual({ ageMs: 60, revision: Number(before.revision) + 1 });
+      f.at(260);
+      // The pretransaction anchor has the old generation. It must not charge
+      // its unpublished elapsed time to this uncertain, durable acceptance.
+      expect(await repo.receipt(failed.operationId)).toMatchObject({ status: 'pending', acceptedAgeMs: 60, expiresAgeMs: 160 });
+      expect(await repo.sweep({ limit: 2 })).toEqual({ deleted: 0 });
+    } else {
+      expect(f.saved()).toEqual(before);
+      expect(await repo.receipt(failed.operationId)).toBeUndefined();
+      f.at(99); expect(await repo.read(write.batch.ref)).toEqual(write.batch);
+      f.at(100); expect(await repo.sweep({ limit: 1 })).toEqual({ deleted: 1 });
+    }
   } finally { await f.close(); }
 });
 

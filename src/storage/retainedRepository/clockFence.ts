@@ -11,6 +11,21 @@ interface AuthorityOptions {
   readonly requiredTables?: readonly string[];
 }
 const unconfirmed = (): never => { throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); };
+function inTransaction(db: DatabaseSync): boolean {
+  // isTransaction was added after the supported Node 22.13 minimum. A nested
+  // BEGIN is rejected without changing the existing transaction; if it starts
+  // instead, roll back only that empty probe transaction before returning.
+  if (typeof db.isTransaction === 'boolean') return db.isTransaction;
+  try { db.exec('BEGIN DEFERRED'); }
+  catch (error) {
+    if (error instanceof Error && Object.getOwnPropertyDescriptor(error, 'code')?.value === 'ERR_SQLITE_ERROR' &&
+      Object.getOwnPropertyDescriptor(error, 'errcode')?.value === 1 &&
+      error.message === 'cannot start a transaction within a transaction') return true;
+    throw error;
+  }
+  db.exec('ROLLBACK');
+  return false;
+}
 function file(path: string): Stats | undefined {
   try {
     const info = lstatSync(path);
@@ -46,7 +61,7 @@ export class ClockAuthority {
 
   /** True permits first schema creation. Existing authority is never repaired in place. */
   requireAuthority(db: DatabaseSync): boolean {
-    if (this.closed || this.ledger || !db.isTransaction) return unconfirmed();
+    if (this.closed || this.ledger || !inTransaction(db)) return unconfirmed();
     this.ledger = db;
     this.ledgerFile = file(join(this.directory, this.ledgerName));
     if (!this.ledgerFile) return unconfirmed();
@@ -64,7 +79,7 @@ export class ClockAuthority {
 
   /** Called only for a new schema, in the same transaction as its policy and clock row. */
   bind(db: DatabaseSync): void {
-    if (this.closed || this.ledger !== db || !db.isTransaction || !this.needsBinding) return unconfirmed();
+    if (this.closed || this.ledger !== db || !inTransaction(db) || !this.needsBinding) return unconfirmed();
     db.exec('CREATE TABLE authority(id INTEGER PRIMARY KEY CHECK(id=1),token TEXT NOT NULL)');
     db.prepare('INSERT INTO authority VALUES(1,?)').run(this.token);
     this.validate(db);
@@ -89,7 +104,7 @@ export class ClockAuthority {
   }
 
   activate(): void {
-    if (this.closed || !this.prepared || !this.ledger || this.ledger.isTransaction) return unconfirmed();
+    if (this.closed || !this.prepared || !this.ledger || inTransaction(this.ledger)) return unconfirmed();
     const current = file(join(this.directory, this.ledgerName));
     if (!current || current.dev !== this.ledgerFile?.dev || current.ino !== this.ledgerFile.ino) return unconfirmed();
     if (this.initializing) {
@@ -102,7 +117,7 @@ export class ClockAuthority {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    try { if (this.db.isTransaction) this.db.exec('ROLLBACK'); }
+    try { if (inTransaction(this.db)) this.db.exec('ROLLBACK'); }
     finally { this.db.close(); }
   }
 }
@@ -141,7 +156,7 @@ export function clockFence(Database: typeof DatabaseSync, directory: string, ret
       options.settings ?? '{"expiryClock":"verified-uptime"}', options.requiredTables ?? [],
       authority.token, authority.state === 'initializing');
   } catch (error) {
-    try { if (db.isTransaction) db.exec('ROLLBACK'); }
+    try { if (inTransaction(db)) db.exec('ROLLBACK'); }
     finally { db.close(); }
     throw error;
   }

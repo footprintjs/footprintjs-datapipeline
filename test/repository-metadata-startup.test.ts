@@ -22,7 +22,7 @@ async function fixture(bounded = true) {
     async close() { repo.close(); await rm(directory, { recursive: true, force: true }); } };
 }
 
-type StartupStage = 'fence' | 'schema' | 'policy' | 'initial-clock' | 'constructor-commit' | 'budget-activation';
+type StartupStage = 'fence' | 'schema' | 'policy' | 'initial-clock' | 'constructor-commit' | 'budget-activation' | 'authority-activation';
 
 /** The engine produces SQLITE_FULL; no synthetic SQLite errors or physical disk fill. */
 function nativeFullOnce(stage: StartupStage) {
@@ -46,22 +46,21 @@ function nativeFullOnce(stage: StartupStage) {
   };
   vi.spyOn(DatabaseSync.prototype, 'prepare').mockImplementation(function (this: DatabaseSync, sql: string) {
     const statement = prepare.call(this, sql);
-    if (armed && stage === 'policy' && sql === 'INSERT OR IGNORE INTO policy VALUES(1,2,?,?)') {
+    if (armed && stage === 'policy' && sql === 'INSERT INTO policy VALUES(1,5,?,?)') {
+      vi.spyOn(statement, 'run').mockImplementationOnce(() => fail(this));
+    }
+    if (armed && stage === 'authority-activation' && sql.startsWith("UPDATE clock_authority SET state='active'")) {
       vi.spyOn(statement, 'run').mockImplementationOnce(() => fail(this));
     }
     return statement;
   });
   vi.spyOn(DatabaseSync.prototype, 'exec').mockImplementation(function (this: DatabaseSync, sql: string) {
     if (armed) {
-      if ((stage === 'fence' && sql.startsWith('CREATE TABLE IF NOT EXISTS policy')) ||
-        (stage === 'schema' && sql.startsWith('PRAGMA page_size=4096'))) return fail(this, sql);
-      if (sql === 'INSERT OR IGNORE INTO elapsed_clock VALUES(1,0); COMMIT') {
-        if (stage === 'initial-clock') return fail(this);
-        if (stage === 'constructor-commit') {
-          exec.call(this, 'INSERT OR IGNORE INTO elapsed_clock VALUES(1,0)');
-          return fail(this);
-        }
-      }
+      if ((stage === 'fence' && sql.startsWith('CREATE TABLE policy') && sql.includes('clock_authority')) ||
+        (stage === 'schema' && sql.startsWith('CREATE TABLE policy') && sql.includes('CREATE TABLE operations'))) return fail(this, sql);
+      if (stage === 'initial-clock' && sql === 'INSERT INTO elapsed_clock VALUES(1,0,0)') return fail(this);
+      if (stage === 'constructor-commit' && sql === 'COMMIT' &&
+        prepare.call(this, "SELECT 1 FROM sqlite_master WHERE type='table' AND name='elapsed_clock'").get()) return fail(this);
       if (stage === 'budget-activation' && sql === 'PRAGMA cache_spill=OFF') return fail(this);
     }
     return exec.call(this, sql);
@@ -74,7 +73,7 @@ function nativeFullOnce(stage: StartupStage) {
   };
 }
 
-it.each<StartupStage>(['fence', 'schema', 'policy', 'initial-clock', 'constructor-commit', 'budget-activation'])(
+it.each<StartupStage>(['fence', 'schema', 'policy', 'initial-clock', 'constructor-commit', 'budget-activation', 'authority-activation'])(
   'maps native FULL during startup %s, closes the failed connection and permits a clean retry', async stage => {
     const f = await fixture();
     const assertFailure = nativeFullOnce(stage);

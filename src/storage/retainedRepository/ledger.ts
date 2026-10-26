@@ -5,6 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { RepositoryRetentionError, type RepositoryRetentionReceipt, type RetainedRepositoryOptions } from './contracts.js';
 import { ElapsedAge } from './elapsedAge.js';
 import { clockFence } from './clockFence.js';
+import { MetadataBudget, metadataWriteFailure } from './metadataBudget.js';
 import { admitTransaction } from './admission.js';
 import { inTransaction } from './transactionState.js';
 export interface Row extends RepositoryRetentionReceipt { fingerprint: string; writeHash: string }
@@ -17,6 +18,7 @@ function isBusy(error: unknown): boolean {
 export class RepositoryLedger {
   private readonly db: DatabaseSync;
   private readonly age?: ElapsedAge;
+  private readonly budget?: MetadataBudget;
   constructor(directory: string, private readonly retentionMs: number, options?: RetainedRepositoryOptions) {
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
     const guarded = options?.expiryClock === 'verified-uptime';
@@ -24,28 +26,32 @@ export class RepositoryLedger {
       let authority: ReturnType<typeof clockFence> | undefined;
       let db: DatabaseSync | undefined;
       try {
-        authority = clockFence(DatabaseSync, directory, retentionMs);
+        const settings = JSON.stringify({ expiryClock: 'verified-uptime', ...(options.metadataLimits ? { metadataLimits: options.metadataLimits } : {}) });
+        authority = clockFence(DatabaseSync, directory, retentionMs, { settings });
         const path = join(directory, 'retention-v2.sqlite');
         this.db = db = new DatabaseSync(path);
         chmodSync(path, 0o600);
-        db.exec('PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=0; BEGIN IMMEDIATE');
+        db.exec('PRAGMA page_size=4096; PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=0; BEGIN IMMEDIATE');
         if (authority.requireAuthority(db)) {
           db.exec(`CREATE TABLE policy(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,retentionMs INTEGER NOT NULL,settings TEXT NOT NULL);
             CREATE TABLE operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0,acceptedAgeMs INTEGER NOT NULL,expiresAgeMs INTEGER NOT NULL);
             CREATE INDEX expiry ON operations(expiresAgeMs) WHERE dataDeleted=0;
             CREATE TABLE refs(refHash TEXT PRIMARY KEY,operationHash TEXT NOT NULL);
             CREATE TABLE elapsed_clock(id INTEGER PRIMARY KEY CHECK(id=1),ageMs INTEGER NOT NULL,revision INTEGER NOT NULL);`);
-          db.prepare('INSERT INTO policy VALUES(1,5,?,?)').run(retentionMs, '{"expiryClock":"verified-uptime"}');
+          db.prepare('INSERT INTO policy VALUES(1,5,?,?)').run(retentionMs, settings);
           db.exec('INSERT INTO elapsed_clock VALUES(1,0,0)');
           authority.bind(db);
         }
         this.age = new ElapsedAge(db, options.monotonicClock ?? (() => performance.now()));
+        if (options.metadataLimits) this.budget = new MetadataBudget(db, directory, options.metadataLimits);
         db.exec('COMMIT');
         authority.activate();
         return;
       } catch (error) {
         if (db) { try { if (inTransaction(db)) db.exec('ROLLBACK'); } finally { db.close(); } }
         if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+        // Startup may fail before a MetadataBudget instance exists.
+        if (options.metadataLimits) metadataWriteFailure(error);
         throw error;
       } finally { authority?.close(); }
     }
@@ -65,11 +71,13 @@ export class RepositoryLedger {
       if (this.db.isTransaction) this.db.exec('ROLLBACK');
       this.db.close();
       if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+      // Startup writes can fail before the budget has been constructed.
+      if (options?.metadataLimits) metadataWriteFailure(error);
       throw error;
     }
   }
   begin(): void {
-    try { this.db.exec('BEGIN IMMEDIATE'); this.age?.begin(); }
+    try { this.db.exec('BEGIN IMMEDIATE'); this.budget?.checkFiles(); this.age?.begin(); }
     catch (error) {
       if (this.age ? inTransaction(this.db) : this.db.isTransaction) this.db.exec('ROLLBACK');
       this.age?.rolledBack();
@@ -77,13 +85,18 @@ export class RepositoryLedger {
       throw error;
     }
   }
+  /** Translate only this ledger's own writes; external publication errors stay unconfirmed. */
+  private write<T>(operation: () => T): T {
+    try { return operation(); }
+    catch (error) { if (this.budget) metadataWriteFailure(error); throw error; }
+  }
   async commit(): Promise<void> {
-    this.age?.checkpoint();
+    this.write(() => this.age?.checkpoint());
     // DELETE-journal readers can block COMMIT after BEGIN IMMEDIATE succeeded.
     // SQLITE_BUSY leaves this transaction open. Retry only COMMIT, once the
     // checkpoint and all native publication/cleanup effects have already run.
     await admitTransaction(() => {
-      try { this.db.exec('COMMIT'); }
+      try { this.write(() => this.db.exec('COMMIT')); }
       catch (error) {
         if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
         throw error;
@@ -113,6 +126,10 @@ export class RepositoryLedger {
     return row ? this.row(String(row.operationHash)) : undefined;
   }
   intent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number): void {
+    this.budget?.admit(refs.length);
+    this.write(() => this.insertIntent(hash, fingerprint, writeHash, refs, now, retentionMs));
+  }
+  private insertIntent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number): void {
     if (this.age) {
       const age = this.age.acceptedNow();
       if (!Number.isSafeInteger(age + retentionMs)) throw new RepositoryRetentionError('REPOSITORY_CLOCK_UNAVAILABLE');
@@ -121,11 +138,15 @@ export class RepositoryLedger {
     const insert = this.db.prepare('INSERT INTO refs VALUES(?,?)');
     for (const ref of refs) insert.run(ref, hash);
   }
-  stored(hash: string): void { this.db.prepare("UPDATE operations SET status='stored',confirmed=1 WHERE operationHash=?").run(hash); }
-  expired(hash: string): void { this.db.prepare("UPDATE operations SET status='expired' WHERE operationHash=?").run(hash); }
-  deleted(hash: string): void { this.db.prepare('UPDATE operations SET dataDeleted=1 WHERE operationHash=?').run(hash); }
+  stored(hash: string): void { this.write(() => this.db.prepare("UPDATE operations SET status='stored',confirmed=1 WHERE operationHash=?").run(hash)); }
+  expired(hash: string): void { this.write(() => this.db.prepare("UPDATE operations SET status='expired' WHERE operationHash=?").run(hash)); }
+  deleted(hash: string): void { this.write(() => this.db.prepare('UPDATE operations SET dataDeleted=1 WHERE operationHash=?').run(hash)); }
   expiredAt(row: Row, wall: number): boolean { return row.status === 'expired' || (this.age ? row.expiresAgeMs! <= this.age.now() : row.expiresAt <= wall); }
   wallBased(): boolean { return !this.age; }
+  metadataCapacity(request: { operations: number; references: number }) {
+    if (!this.budget) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+    return this.budget.capacity(request);
+  }
   candidates(now: number, limit: number): Row[] {
     const field = this.age ? 'expiresAgeMs' : 'expiresAt';
     return this.db.prepare(`SELECT operationHash FROM operations WHERE (${field}<=? OR status='expired') AND dataDeleted=0 ORDER BY ${field},operationHash LIMIT ?`)

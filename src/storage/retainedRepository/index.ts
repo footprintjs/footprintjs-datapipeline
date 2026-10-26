@@ -23,7 +23,12 @@ export class RetainedFilesystemRepository implements Repository {
   private readonly reads = new RepositoryReadBatcher(refs => this.readMany(refs));
   private publishing?: string;
   private cleanupRunning = false;
-  constructor(private readonly options: RetainedRepositoryOptions) { checkOptions(options); this.options = Object.freeze({ ...options }); }
+  constructor(private readonly options: RetainedRepositoryOptions) {
+    checkOptions(options);
+    this.options = Object.freeze({ ...options, ...(options.metadataLimits ? { metadataLimits: Object.freeze({
+      maxBytes: options.metadataLimits.maxBytes, maxOperations: options.metadataLimits.maxOperations, maxReferences: options.metadataLimits.maxReferences,
+    }) } : {}) });
+  }
   private fresh = (row: Row): void => {
     const now = time(this.options);
     if (this.ledger!.expiredAt(row, now)) {
@@ -64,6 +69,10 @@ export class RetainedFilesystemRepository implements Repository {
     }
   }
   read(ref: RecordRef) { return this.reads.read(ref); }
+  /** A snapshot for host preflight, not a reservation or publication promise. */
+  metadataCapacity(request = { operations: 1, references: 1 }) {
+    return this.exclusive(async () => this.ledger!.metadataCapacity(request));
+  }
   readMany(refs: readonly RecordRef[]) { return this.exclusive(() => this.data!.readMany(refs)); }
   findOperation(id: string) {
     return this.exclusive(async () => {

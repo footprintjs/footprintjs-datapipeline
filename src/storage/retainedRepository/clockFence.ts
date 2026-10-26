@@ -79,7 +79,8 @@ export class ClockAuthority {
       if (!present.has(name)) return unconfirmed();
     }
     const policy = single(db, 'policy', 'id,version,retentionMs,settings');
-    if (policy.version !== this.version || policy.retentionMs !== this.retentionMs || policy.settings !== this.settings) return unconfirmed();
+    if (policy.version !== this.version || policy.retentionMs !== this.retentionMs) return unconfirmed();
+    if (policy.settings !== this.settings) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
     if (single(db, 'authority', 'id,token').token !== this.token) return unconfirmed();
     const clock = single(db, 'elapsed_clock', 'id,ageMs,revision');
     if (!Number.isSafeInteger(clock.ageMs) || Number(clock.ageMs) < 0 ||

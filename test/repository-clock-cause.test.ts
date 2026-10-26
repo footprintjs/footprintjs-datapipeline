@@ -9,12 +9,13 @@ import { runWindowFlow, type CommitWrite, type JsonValue } from '../src/index.js
 import { createFilesystemRepository, createRetainedFilesystemRepository } from '../src/storage/filesystem.js';
 import { candidate } from './helpers/filesystem-candidate.js';
 
-it('clock-safe storage reopens identical native cause answers and exact source references, with gaps separate from numbers', async () => {
+it.each([false, true])('clock-safe storage preserves native cause answers, references and separate gaps (metadata limits=%s)', async bounded => {
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'clock-cause-')));
   let wall = 1_790_000_000_000;
   const repo = createRetainedFilesystemRepository({ enabled: true, directory: join(directory, 'guarded'),
     retentionMs: 1000, expiryClock: 'verified-uptime', clock: () => wall, monotonicClock: () => 0,
-    requireSeparateFilesystem: false, onHealth() {} })!;
+    requireSeparateFilesystem: false, onHealth() {},
+    ...(bounded ? { metadataLimits: { maxBytes: 2 * 1024 * 1024, maxOperations: 10, maxReferences: 100 } } : {}) })!;
   try {
     const source = candidate('source'); await repo.commit(source);
     interface Scope { input: { ref: typeof source.observations[0]['ref']; value: number }; gap: string; statistics: { count: number; mean: number }; coverage: string }

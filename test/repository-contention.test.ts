@@ -21,21 +21,22 @@ vi.mock('node:fs/promises', async original => {
 });
 afterEach(() => { deletion.hold = undefined; vi.restoreAllMocks(); });
 
-async function fixture(verified = false) {
+async function fixture(bounded = false) {
   const directory = await realpath(await mkdtemp(join(tmpdir(), 'repository-contention-')));
   let now = 0;
   const alerts: unknown[] = [];
   const options = { enabled: true, directory, retentionMs: 100, requireSeparateFilesystem: false,
-    clock: () => now, ...(verified ? { expiryClock: 'verified-uptime' as const, monotonicClock: () => now } : {}),
-    onHealth: (event: unknown) => { alerts.push(event); } };
+    clock: () => now, onHealth: (event: unknown) => { alerts.push(event); },
+    ...(bounded ? { expiryClock: 'verified-uptime' as const, monotonicClock: () => now,
+      metadataLimits: { maxBytes: 2 * 1024 * 1024, maxOperations: 100, maxReferences: 1000 } } : {}) };
   const stores: ReturnType<typeof createRetainedFilesystemRepository>[] = [];
   function open() { const store = createRetainedFilesystemRepository(options)!; stores.push(store); return store; }
   return { directory, options, alerts, open, at: (value: number) => { now = value; },
     async close() { for (const store of stores) store!.close(); await rm(directory, { recursive: true, force: true }); } };
 }
 
-it.each([false, true])('publishes seven polls while real cleanup is still blocked on deletion (verified clock: %s)', async verified => {
-  const f = await fixture(verified), cleanup = f.open(), pollers = Array.from({ length: 7 }, () => f.open());
+it.each([false, true])('publishes seven polls while real deletion is still blocked (bounded=%s)', async bounded => {
+  const f = await fixture(bounded), cleanup = f.open(), pollers = Array.from({ length: 7 }, () => f.open());
   const old = candidate('expired-before-polls');
   let release!: () => void, entered!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
@@ -62,7 +63,7 @@ it.each([false, true])('publishes seven polls while real cleanup is still blocke
     }
     expect(await pollers[0]!.receipt(old.operationId)).toMatchObject({ status: 'expired', dataDeleted: false });
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    const observer = new DatabaseSync(join(f.directory, verified ? 'retention-v2.sqlite' : 'retention.sqlite'));
+    const observer = new DatabaseSync(join(f.directory, bounded ? 'retention-v2.sqlite' : 'retention.sqlite'));
     try { observer.exec('BEGIN IMMEDIATE; ROLLBACK'); } finally { observer.close(); }
     release();
     expect(await sweep).toEqual({ deleted: 1 });

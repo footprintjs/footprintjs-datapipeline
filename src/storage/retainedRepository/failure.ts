@@ -5,7 +5,7 @@ export function storageFailure(options: RetainedRepositoryOptions, error: unknow
   const safe = error instanceof RepositoryRetentionError || error instanceof FilesystemRepositoryError
     ? error : new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
   let code: RepositoryRetentionCode | undefined;
-  if (safe instanceof RepositoryRetentionError && ['REPOSITORY_BUSY', 'REPOSITORY_UNCONFIRMED', 'REPOSITORY_CLOCK_UNAVAILABLE'].includes(safe.code)) code = safe.code;
+  if (safe instanceof RepositoryRetentionError && ['REPOSITORY_BUSY', 'REPOSITORY_UNCONFIRMED', 'REPOSITORY_CLOCK_UNAVAILABLE', 'REPOSITORY_METADATA_LIMIT'].includes(safe.code)) code = safe.code;
   if (safe instanceof FilesystemRepositoryError && safe.code === 'storage_corrupt') code = 'REPOSITORY_UNCONFIRMED';
   if (code) {
     try { void Promise.resolve(options.onHealth({ code })).catch(() => {}); }

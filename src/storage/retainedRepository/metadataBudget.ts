@@ -5,8 +5,7 @@ import { RepositoryRetentionError, type RepositoryMetadataCapacity, type Reposit
 const PAGE_BYTES = 4096;
 // Reserve fixed fence files/sidecars, journal headers and supported allocation rounding.
 const CONTROL_RESERVE_BYTES = 1024 * 1024;
-const CONTROL_FILES = ['retention.sqlite', 'retention.sqlite-journal', 'retention.sqlite-wal',
-  'retention.sqlite-shm', 'retention-v2.sqlite', 'retention-v2.sqlite-journal'];
+const CONTROL_FILES = ['retention.sqlite', 'retention.sqlite-journal', 'retention.sqlite-wal', 'retention.sqlite-shm'];
 export function checkedMetadataLimits(limits: RepositoryMetadataLimits): void {
   if (!limits || Object.keys(limits).some(key => !['maxBytes', 'maxOperations', 'maxReferences'].includes(key)) ||
     !Number.isSafeInteger(limits.maxBytes) || limits.maxBytes < 2 * CONTROL_RESERVE_BYTES || limits.maxBytes > 2 ** 40 ||
@@ -24,7 +23,8 @@ export class MetadataBudget {
   readonly pageLimit: number;
   private readonly blockBytes: number;
   constructor(private readonly db: DatabaseSync, private readonly directory: string,
-    private readonly limits: RepositoryMetadataLimits) {
+    private readonly limits: RepositoryMetadataLimits,
+    private readonly ledgerFile = 'retention-v2.sqlite', private readonly reclaiming = false) {
     this.blockBytes = Number(statfsSync(directory, { bigint: true }).bsize);
     if (!Number.isSafeInteger(this.blockBytes) || this.blockBytes < 1 || this.blockBytes > 65536) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
     if (Number(db.prepare('PRAGMA page_size').get()!.page_size) !== PAGE_BYTES) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
@@ -40,14 +40,14 @@ export class MetadataBudget {
     if (this.db.prepare('PRAGMA journal_mode').get()!.journal_mode !== 'delete' ||
       this.db.prepare('PRAGMA cache_spill').get()!.cache_spill !== 0) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
     let bytes = 0;
-    for (const name of CONTROL_FILES) {
+    for (const name of [...CONTROL_FILES, this.ledgerFile, this.ledgerFile + '-journal']) {
       try {
         const info = lstatSync(join(this.directory, name));
         if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
         bytes += Math.max(info.blocks * 512, Math.ceil(info.size / this.blockBytes) * this.blockBytes);
       } catch (error) {
         if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error;
-        if (name === 'retention.sqlite' || name === 'retention-v2.sqlite') throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
+        if (name === 'retention.sqlite' || name === this.ledgerFile) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
       }
     }
     if (!Number.isSafeInteger(bytes) || bytes > this.limits.maxBytes) throw new RepositoryRetentionError('REPOSITORY_METADATA_LIMIT');
@@ -55,9 +55,11 @@ export class MetadataBudget {
   }
   capacity(request: { operations: number; references: number }): RepositoryMetadataCapacity {
     if (![request.operations, request.references].every(value => Number.isSafeInteger(value) && value >= 0)) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
-    // These append-only ownership tables never delete rows; max rowid is the exact count.
-    const operations = Number(this.db.prepare('SELECT coalesce(max(rowid),0) AS n FROM operations').get()!.n);
-    const references = Number(this.db.prepare('SELECT coalesce(max(rowid),0) AS n FROM refs').get()!.n);
+    // Legacy tables are append-only. The opt-in retirement format reuses rows,
+    // so max(rowid) must never be interpreted as its live membership count.
+    const counts = this.reclaiming ? this.db.prepare('SELECT operations,refs FROM history_counts WHERE id=1').get() : undefined;
+    const operations = Number(this.reclaiming ? counts?.operations : this.db.prepare('SELECT coalesce(max(rowid),0) AS n FROM operations').get()!.n);
+    const references = Number(this.reclaiming ? counts?.refs : this.db.prepare('SELECT coalesce(max(rowid),0) AS n FROM refs').get()!.n);
     if (![operations, references].every(value => Number.isSafeInteger(value) && value >= 0) ||
       operations > this.limits.maxOperations || references > this.limits.maxReferences) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
     const pages = Number(this.db.prepare('PRAGMA page_count').get()!.page_count);

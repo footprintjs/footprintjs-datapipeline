@@ -1,3 +1,11 @@
+> Follow-up implementation: [finite daily-period history](../REPOSITORY_HISTORY.md)
+> implements the approved seven-day laptop case directly in the existing hot
+> ledger. With a finite window, no separate sealed catalogue is needed to bound
+> growth: confirmed old periods retire behind a durable fence and SQLite pages
+> are reused. This document's longer-lived cold compaction remains a proposal;
+> it is not required or claimed by that local profile. Production policy and
+> application activation remain separate decisions.
+
 # Sealed periods for expired metadata
 
 Draft integration contract, types only. This is the missing growth work for #27,

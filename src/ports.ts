@@ -60,7 +60,15 @@ export interface OperationCommit {
 
 /** Maximum references per optional bulk request; implementations must not truncate. */
 export const MAX_REPOSITORY_READ_BATCH = 256;
+/** Optional, store-owned identity scope. A host explicitly binds a new period;
+ * retrying within a scope must never silently mint a different operation ID. */
+export interface RepositoryIdentity {
+  operationId(logicalId: string): string;
+  assertOperation(operationId: string, intent: 'lookup' | 'admit'): Promise<void>;
+  reference<K extends RecordRef['kind']>(operationId: string, kind: K, key: string): { kind: K; id: string };
+}
 export interface Repository {
+  readonly identity?: RepositoryIdentity;
   /** Reconcile a retry or an acknowledgement whose commit outcome was unknown. */
   findOperation(operationId: string): Promise<OperationCommit | undefined>;
   /**

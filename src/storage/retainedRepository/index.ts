@@ -1,4 +1,4 @@
-import type { CommitWrite, Repository } from '../../ports.js';
+import type { CommitWrite, Repository, RepositoryIdentity } from '../../ports.js';
 import type { RecordRef } from '../../contracts.js';
 import { FilesystemRepositoryError } from '../filesystemError.js';
 import { RepositoryRetentionError, type RetainedRepositoryOptions, type RepositoryRetentionReceipt } from './contracts.js';
@@ -11,8 +11,11 @@ import { readOwned } from './readOwned.js';
 import { prepareIntent, snapshotWrite, operationHash } from './commit.js';
 import { removeOperation } from './cleanup.js';
 import { admitTransaction } from './admission.js';
+import { setTimeout as maintenanceYield } from 'node:timers/promises';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
-import { storageFailure } from './failure.js';
+import { storageFailure, storageAlert } from './failure.js';
+import { scopedIdentity, scopedRepository } from './historyScope.js';
+import { removeHistoryStage } from './historyStaging.js';
 export * from './contracts.js';
 /** Explicit, packed, managed namespace. No timer, automatic resend or legacy adoption. */
 export class RetainedFilesystemRepository implements Repository {
@@ -23,11 +26,16 @@ export class RetainedFilesystemRepository implements Repository {
   private readonly reads = new RepositoryReadBatcher(refs => this.readMany(refs));
   private publishing?: string;
   private cleanupRunning = false;
+  private historyPendingNotified = false;
+  readonly identity?: RepositoryIdentity;
   constructor(private readonly options: RetainedRepositoryOptions) {
     checkOptions(options);
     this.options = Object.freeze({ ...options, ...(options.metadataLimits ? { metadataLimits: Object.freeze({
       maxBytes: options.metadataLimits.maxBytes, maxOperations: options.metadataLimits.maxOperations, maxReferences: options.metadataLimits.maxReferences,
-    }) } : {}) });
+    }) } : {}), ...(options.historyRetirement ? { historyRetirement: Object.freeze({ ...options.historyRetirement }) } : {}) });
+    const policy = this.options.historyRetirement;
+    if (policy) this.identity = scopedIdentity(policy,
+      (id, intent) => this.exclusive(async () => { this.ledger!.checkOperation(id, intent); }));
   }
   private fresh = (row: Row): void => {
     const now = time(this.options);
@@ -42,7 +50,8 @@ export class RetainedFilesystemRepository implements Repository {
     this.path = await readyDirectory(this.options);
     this.ledger = new RepositoryLedger(this.path, this.options.retentionMs, this.options);
     const { IndexedData } = await import('./indexedData.js');
-    this.data = new IndexedData(this.path, refs => readOwned(refs, this.ledger!, this.data!, this.fresh, this.publishing));
+    this.data = new IndexedData(this.path, refs => readOwned(refs, this.ledger!, this.data!, this.fresh, this.publishing),
+      this.options.historyRetirement?.maxOperationBytes, !!this.options.historyRetirement);
   }
   private async exclusive<T>(fn: () => Promise<T>): Promise<T> {
     try { return await this.serial.run(() => this.transaction(fn)); }
@@ -68,14 +77,24 @@ export class RetainedFilesystemRepository implements Repository {
       throw safe;
     }
   }
+  /** Prepare the current or next verified-age period. Admission still checks its time on every operation. */
+  bindPeriod(period: number): Promise<Repository> {
+    return this.exclusive(async () => {
+      if (!this.options.historyRetirement || !Number.isSafeInteger(period) || period < 0) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+      const current = this.ledger!.historyStatus().currentPeriod;
+      if (period !== current && period !== current + 1) throw new RepositoryRetentionError('REPOSITORY_PERIOD_CLOSED');
+      return scopedRepository(this, scopedIdentity({ ...this.options.historyRetirement, period }, this.identity!.assertOperation));
+    });
+  }
   read(ref: RecordRef) { return this.reads.read(ref); }
   /** A snapshot for host preflight, not a reservation or publication promise. */
   metadataCapacity(request = { operations: 1, references: 1 }) {
     return this.exclusive(async () => this.ledger!.metadataCapacity(request));
   }
-  readMany(refs: readonly RecordRef[]) { return this.exclusive(() => this.data!.readMany(refs)); }
+  readMany(refs: readonly RecordRef[]) { return this.exclusive(async () => { this.ledger!.checkRefs(refs); return this.data!.readMany(refs); }); }
   findOperation(id: string) {
     return this.exclusive(async () => {
+      this.ledger!.checkOperation(id);
       const row = this.ledger!.row(operationHash(id)); if (!row) return undefined;
       this.fresh(row); const result = await this.data!.findOperation(id);
       if (!result && row.status === 'stored') throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
@@ -88,6 +107,7 @@ export class RetainedFilesystemRepository implements Repository {
     // The pending intent commits before native publication. A crash never loses its identity/expiry.
     await this.exclusive(async () => prepareIntent(write, this.ledger!, this.fresh, time(this.options), this.options.retentionMs));
     return this.exclusive(async () => {
+      this.ledger!.checkOperation(write.operationId);
       const hash = operationHash(write.operationId); this.fresh(this.ledger!.row(hash)!); this.publishing = hash;
       try { const receipt = await this.data!.commit(write); this.fresh(this.ledger!.row(hash)!); if (receipt.status === 'committed') this.ledger!.stored(hash); return receipt; }
       finally { delete this.publishing; }
@@ -95,6 +115,7 @@ export class RetainedFilesystemRepository implements Repository {
   }
   receipt(id: string): Promise<RepositoryRetentionReceipt | undefined> {
     return this.exclusive(async () => {
+      this.ledger!.checkOperation(id);
       const row = this.ledger!.row(operationHash(id)); if (!row) return undefined;
       if (this.ledger!.expiredAt(row, time(this.options))) this.ledger!.expired(row.operationHash);
       return { operationHash: row.operationHash, acceptedAt: row.acceptedAt, expiresAt: row.expiresAt, status: this.ledger!.row(row.operationHash)!.status, publication: row.publication, dataDeleted: row.dataDeleted,
@@ -112,14 +133,36 @@ export class RetainedFilesystemRepository implements Repository {
         await this.exclusive(async () => this.ledger!.expired(row.operationHash)); // durable before unlink
         // Expired identities cannot publish again. Unlink/fsync needs no database
         // lock; a crash here leaves dataDeleted=false for explicit reconciliation.
-        try { await removeOperation(this.path!, row.operationHash); }
+        try {
+          await removeOperation(this.path!, row.operationHash);
+          if (this.options.historyRetirement) await removeHistoryStage(this.path!, row.operationHash);
+        }
         catch (error) { return storageFailure(this.options, error); }
         await this.exclusive(async () => this.ledger!.deleted(row.operationHash));
         deleted++;
         await yieldTurn();
       }
+      if (this.options.historyRetirement) await this.retireHistory({ limit: options.limit });
       return { deleted };
     } finally { this.cleanupRunning = false; }
+  }
+  historyStatus() { return this.exclusive(async () => this.ledger!.historyStatus()); }
+  async retireHistory(options: { limit: number }) {
+    if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+    const result = await this.exclusive(async () => this.ledger!.retireHistory(options.limit));
+    // Report only committed observations. A normal bounded pass may leave work;
+    // notify once per episode instead of flooding a host that drains thousands
+    // of passes. This is not a timer or a claim about the host's drain rate.
+    if (!result.pending) this.historyPendingNotified = false;
+    if (result.blocked) storageAlert(this.options, 'REPOSITORY_HISTORY_BLOCKED');
+    else if (result.pending && !this.historyPendingNotified) {
+      this.historyPendingNotified = true;
+      storageAlert(this.options, 'REPOSITORY_HISTORY_PENDING');
+    }
+    // Yield outside the transaction/serial owner, so a draining worker does not
+    // reacquire the lock continuously ahead of another process's admission retry.
+    if (result.pending && !result.blocked) await maintenanceYield(5);
+    return result;
   }
   close(): void { if (this.cleanupRunning || this.serial.pending || this.reads.busy) throw new RepositoryRetentionError('REPOSITORY_BUSY'); this.ledger?.close(); delete this.ledger; delete this.data; }
 }

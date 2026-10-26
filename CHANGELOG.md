@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Optional daily-period history retirement for fresh verified-uptime namespaces.
+  Required finite host policy, period-bound core IDs, durable retired-prefix
+  fencing, cumulative checkpoints, bounded row reclamation and reusable metadata
+  capacity. The laptop example keeps seven days. Stable managed staging bounds
+  interrupted retries. Existing stores/IDs and defaults are unchanged; no timer,
+  migration, deployment or source-authenticity claim is added. Whole-period
+  verification now resumes through bounded transactions, including unconfirmed
+  saves whose files are confirmed gone; uncertainty is counted separately.
+  Transactional membership counters avoid admission scans. New work can bind a
+  new period without reopening storage or changing previous retry IDs. The
+  revised private ledger uses format 6 and refuses earlier unpublished formats.
+  Hosts may prepare the immediately next verified-age scope while admission
+  still refuses early dispatch and late first writes. Committed maintenance
+  reports unblocked pending work once per open-handle episode through
+  `REPOSITORY_HISTORY_PENDING`; host scheduling and backlog monitoring remain
+  required. The capacity test retains its byte assertions with a longer timeout.
 - Correct verified-age attribution across staggered handles. Each new accepted
   intent advances a durable revision; other handles discard ambiguous earlier
   elapsed time. Reads and maintenance preserve a publisher's continuous clock.
@@ -19,7 +35,8 @@
   snapshot, not a reservation or a payload/disk quota. No period retirement,
   default limit, migration or automatic activation is added.
   This is an emergency admission guard only: metadata growth is not reduced,
-  and sealed-period integration remains a required, unimplemented readiness gate.
+  without the separate opt-in finite-history profile. Host integration and
+  sustained maintenance capacity remain readiness gates.
   Native ledger `SQLITE_FULL` failures report the limit, including first-open
   fence/schema/policy/clock writes, startup commit and budget activation,
   publication acknowledgement, expiry/deletion markers, elapsed checkpoints and

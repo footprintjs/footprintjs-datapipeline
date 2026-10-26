@@ -221,6 +221,9 @@ export class FilesystemRepository implements Repository {
     });
   }
 
+  /** Internal specialization point. The default plain/packed backend is unchanged. */
+  protected createStagingDirectory(_operationId: string): Promise<string> { return mkdtemp(join(this.operations, '.stage-')); }
+
   private existing(operation: OperationCommit, fingerprint: string): CommitReceipt {
     if (operation.fingerprint !== fingerprint) {
       throw new FilesystemRepositoryError('idempotency_conflict', 'This operation ID was already committed with a different request fingerprint.');
@@ -249,7 +252,7 @@ export class FilesystemRepository implements Repository {
       }
     }
     await ensureDirectory(this.operations);
-    const staging = await mkdtemp(join(this.operations, '.stage-'));
+    const staging = await this.createStagingDirectory(operationId);
     const final = join(this.operations, digest(write.operationId));
     let published = false;
     try {
@@ -360,5 +363,5 @@ export function createFilesystemTraceStore(options: FilesystemTraceOptions): Fil
 export { createGuardedFilesystemTraceStore, GuardedFilesystemTraceStore, TraceStorageError, TRACE_RETENTION_MS } from './guardedTrace/index.js';
 export type { GuardedTraceOptions, TraceStorageHealth, TraceStorageReceipt, TraceStorageGapReceipt, TraceStorageCode } from './guardedTrace/index.js';
 
-export { createRetainedFilesystemRepository, RetainedFilesystemRepository, RepositoryRetentionError, RETAINED_REPOSITORY_SAFETY_VERSION } from './retainedRepository/index.js';
-export type { RetainedRepositoryOptions, RepositoryRetentionReceipt, RepositoryRetentionCode, RepositoryMetadataLimits, RepositoryMetadataCapacity } from './retainedRepository/index.js';
+export { createRetainedFilesystemRepository, RetainedFilesystemRepository, RepositoryRetentionError, RETAINED_REPOSITORY_SAFETY_VERSION, REPOSITORY_HISTORY_VERSION } from './retainedRepository/index.js';
+export type { RetainedRepositoryOptions, RepositoryRetentionReceipt, RepositoryRetentionCode, RepositoryMetadataLimits, RepositoryMetadataCapacity, RepositoryHistoryPolicy, RepositoryHistoryStatus } from './retainedRepository/index.js';

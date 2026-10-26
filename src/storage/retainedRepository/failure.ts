@@ -1,5 +1,9 @@
 import { FilesystemRepositoryError } from '../filesystemError.js';
 import { RepositoryRetentionError, type RetainedRepositoryOptions, type RepositoryRetentionCode } from './contracts.js';
+export function storageAlert(options: RetainedRepositoryOptions, code: RepositoryRetentionCode): void {
+  try { void Promise.resolve(options.onHealth({ code })).catch(() => {}); }
+  catch { /* Independent health cannot change the storage outcome. */ }
+}
 /** Fixed diagnostics also cover filesystem work outside a database transaction. */
 export function storageFailure(options: RetainedRepositoryOptions, error: unknown): never {
   const safe = error instanceof RepositoryRetentionError || error instanceof FilesystemRepositoryError
@@ -7,9 +11,6 @@ export function storageFailure(options: RetainedRepositoryOptions, error: unknow
   let code: RepositoryRetentionCode | undefined;
   if (safe instanceof RepositoryRetentionError && ['REPOSITORY_BUSY', 'REPOSITORY_UNCONFIRMED', 'REPOSITORY_CLOCK_UNAVAILABLE', 'REPOSITORY_METADATA_LIMIT'].includes(safe.code)) code = safe.code;
   if (safe instanceof FilesystemRepositoryError && safe.code === 'storage_corrupt') code = 'REPOSITORY_UNCONFIRMED';
-  if (code) {
-    try { void Promise.resolve(options.onHealth({ code })).catch(() => {}); }
-    catch { /* Independent health cannot change the storage outcome. */ }
-  }
+  if (code) storageAlert(options, code);
   throw safe;
 }

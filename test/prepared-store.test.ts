@@ -185,6 +185,8 @@ describe('indexed prepared summary store', () => {
   });
 
   it('bounds total summary bytes with explicit truncation while retaining complete poll coverage', async () => {
+    // Aggregate setup writes more than 8 MiB before exercising the byte cap.
+    // Allow parallel history/crash fixtures without changing any query bound.
     const store = open(await location()); const s = schedule(); await store.register(s);
     for (let index = 0; index < 36; index++) {
       const slotAt = new Date(Date.parse(s.startAt) + index * s.intervalMs).toISOString();
@@ -195,7 +197,7 @@ describe('indexed prepared summary store', () => {
     expect(result.truncated).toBe(true); expect(result.summaries.length).toBeGreaterThan(0); expect(result.summaries.length).toBeLessThan(36);
     expect(Buffer.byteLength(JSON.stringify(result.summaries))).toBeLessThan(8 * 1024 * 1024);
     expect(result.coverage).toMatchObject({ expectedPolls: 36, collectedPolls: 36, pendingPolls: 0 });
-  });
+  }, 15_000);
 
   it('checks persisted content hashes on summary and poll reads and time queries', async () => {
     const filename = await location(); const store = open(filename); const s = schedule(); const p = poll(s);

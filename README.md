@@ -238,6 +238,17 @@ two processes from simultaneously contacting a source. Supply another
 Stored summary digests protect record consistency; validating original source
 bytes remains a separate, explicit evidence operation.
 
+## Optional finite repository history
+
+For new verified-uptime namespaces, an explicit finite history policy can retire
+whole daily periods while a durable prefix keeps old IDs blocked. The laptop
+example chooses seven days; no default, migration, service or cleanup timer is
+added. Reuse the existing repository and explicit maintenance lifecycle. See
+[finite history, crash proof, caps and measured byte plateaus](docs/REPOSITORY_HISTORY.md).
+Hosts can prepare the next verified-age period without authorizing early work.
+Committed maintenance reports pending work through a bounded health advisory;
+the host still owns draining, period selection and alerts for missed maintenance.
+
 ## Development
 
 ```sh

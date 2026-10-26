@@ -53,16 +53,36 @@ report expired inputs honestly. The app still owns claim/access checks.
 ## Cleanup and concurrency
 
 A durable expired tombstone precedes unlink. Each call selects at most 100
-operations. It removes only the known packed file and its empty operation
+operations. Unlink and parent synchronization run **outside** the database
+transaction, so slow disk cleanup does not hold the lock needed by polls. Once
+those finish, a short transaction confirms `dataDeleted: true`. A failure or crash
+between unlink and that acknowledgement keeps deletion unconfirmed; a later
+explicit cleanup verifies absence and synchronizes before confirming it. An
+expired identity can never publish again, including while its files are removed.
+Each handle allows one cleanup pass, rejects close while it runs, and yields
+between rows. This does not lengthen the admission wait or a poll's deadline.
+It removes only the known packed file and its empty operation
 folder, then syncs the parent. It does not recursively traverse folders or
 follow symlinked operations. Failed deletion keeps `dataDeleted: false`, emits
 a fixed health event, and can be retried. Tombstones and reference membership
 remain after data removal, so the original references say expired after restart.
 They are not automatically expired: metadata itself still grows.
 
-SQLite full-synchronous transactions serialize cooperating processes during
-native publication and reads; another process receives `REPOSITORY_BUSY` rather
-than waiting indefinitely. Per instance at most 32 transactions are queued.
+SQLite full-synchronous transactions serialize metadata, native publication and
+reads across cooperating processes. Competing readers, pollers and cleanup wait
+asynchronously for up to one second to **start each transaction**, including
+first-open schema admission. SQLite's synchronous busy handler stays disabled,
+so the wait does not block the event loop that must release the lock. This is
+an admission budget, not an end-to-end operation deadline. Per instance at most
+32 transactions are queued; queue wait and native I/O are separate costs.
+
+If admission remains busy, or the local queue is full, access fails with
+`REPOSITORY_BUSY` and the independent `onHealth` sink receives that fixed code.
+No data or receipt is invented when an intent could not be saved. The host must
+retain this alert outside the refused repository and account for the unsaved
+slot as a gap. Other storage errors are not treated as lock contention. The
+library retries **only admission**: it never repeats publication, a transaction
+body, cleanup side effects, commit acknowledgement or an uncertain HTTP send.
 Same-turn scalar reads are grouped into chunks of at most 256 (at most 8,192
 queued references), so existing parallel loaders work without one inflate per
 point. A refused bulk read is isolated per reference; an expired item cannot
@@ -76,28 +96,27 @@ checks no longer scan all historical operations. Public plain-store behavior is
 unchanged. Packed decompression remains bounded per operation (16 MiB). Returned
 bulk data and caller-held results can still be large; this is not an AI viewer.
 
-## Actual inactive writer proof
+## Validation and capacity planning
 
-`docs/measurements/measure-retained-repository.mts` runs the actual Neo client
-writer against synthetic saved input, with a simulated acknowledged sink. A
-100 ms controlled-clock TTL is solely an expiry test, not a recommendation.
-The same 242 records across 12 operations match a plain repository; four native
-cause answers match reopened traces. Restart performs no new capture/send.
-Expiry removes all operation data while references remain explicitly expired.
+Self-contained repository tests use synthetic library records to verify immutable
+reopening, explicit expiry, interrupted publication recovery and deletion proof.
+Contention tests hold real cleanup at file deletion while independent poll saves
+finish; fault tests preserve unconfirmed outcomes rather than inventing receipts.
+Run the focused checks from this checkout:
 
-| Fresh test namespace | Packed data | SQLite metadata after close | After data expiry |
-| --- | ---: | ---: | ---: |
-| 50 returned / 50 retained clients | 27,452 B | 49,152 B | 49,152 B metadata |
-| 256 returned / 154 retained clients | 71,537 B | 69,632 B | 69,632 B metadata |
+```sh
+npm test -- test/repository-retention.test.ts test/repository-retention-faults.test.ts test/repository-contention.test.ts
+```
 
-Metadata includes fixed namespace startup cost, so **do not multiply these
-one-run SQLite sizes into a daily estimate**. A sustained test must measure
-marginal growth including WAL, tombstones, trace ledger, raw data and gzip files.
-These numbers are not a real cluster measurement or throughput proof.
+A short controlled-clock TTL in a test is not a recommended retention policy.
+Measure sustained marginal growth on the intended host, including packed data,
+reference membership, tombstones, SQLite journals, trace metadata and raw archives.
+One small namespace includes fixed startup costs and cannot establish a daily
+capacity requirement or collection throughput.
 
 This adds expiry, not a repository disk quota. The trace guard limits traces
 only. Independent headroom monitoring, retention choices, capacity sizing and
 sustained host tests remain required before deployment. Old readers cannot
 explain ledger expiry and must never write into or replace managed readers in
-this namespace. Python, mappings, original application flows and services stay
-unchanged. Upgrade readers before enabling any managed storage.
+this namespace. Existing collectors, mappings, application flows and services
+stay unchanged. Upgrade readers before enabling any managed storage.

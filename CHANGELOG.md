@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Remove application-specific sizing assets and references from the source tree
+  and package. Distribution now names each reviewed guide explicitly instead of
+  including a measurements directory. Storage guidance uses self-contained
+  library tests and requires workload-specific capacity measurements.
+
+- Slow retained-payload unlink/sync no longer holds the database transaction.
+  Expiry is durable first; deletion proof commits only after filesystem work.
+  Poll saves can finish while cleanup is stalled. Per-handle cleanup and close
+  are bounded, and a lost post-unlink acknowledgement remains recoverable.
+
+- Retained repositories now wait asynchronously for bounded SQLite transaction
+  admission, including first-open setup, so overlapping cleanup and publication
+  do not fail immediately on a short lock. Exhausted admission and a full local
+  queue emit a fixed busy health event. Publication and uncertain writes are
+  never automatically retried.
+
 ## [0.9.0] - 2026-10-21
 
 ### Added
@@ -57,7 +75,7 @@
 
 ### Compatibility
 
-- The new output is opt-in. Existing collect/derive flows, schedules, storage contracts and pinned dependencies are unchanged. No vendor collector, Neo integration, background service, automatic retry or exactly-once delivery is added.
+- The new output is opt-in. Existing collect/derive flows, schedules, storage contracts and pinned dependencies are unchanged. No vendor collector, application integration, background service, automatic retry or exactly-once delivery is added.
 
 ## [0.4.1] - 2026-10-18
 

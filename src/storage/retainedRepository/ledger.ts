@@ -12,6 +12,7 @@ import { validateActiveHistory } from './historyFence.js';
 import { validateOwnership } from './historyIdentity.js';
 import type { CommitWrite } from '../../ports.js';
 import type { RecordRef } from '../../contracts.js';
+import { inTransaction } from './transactionState.js';
 export interface Row extends RepositoryRetentionReceipt { fingerprint: string; writeHash: string }
 function isBusy(error: unknown): boolean {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return false;
@@ -61,7 +62,7 @@ export class RepositoryLedger {
         authority.activate();
         return;
       } catch (error) {
-        if (db) { try { if (db.isTransaction) db.exec('ROLLBACK'); } finally { db.close(); } }
+        if (db) { try { if (inTransaction(db)) db.exec('ROLLBACK'); } finally { db.close(); } }
         if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
         // Startup may fail before a MetadataBudget instance exists.
         if (options.metadataLimits) metadataWriteFailure(error);
@@ -92,7 +93,7 @@ export class RepositoryLedger {
   begin(): void {
     try { this.db.exec('BEGIN IMMEDIATE'); this.budget?.checkFiles(); this.age?.begin(); }
     catch (error) {
-      if (this.db.isTransaction) this.db.exec('ROLLBACK');
+      if (this.age ? inTransaction(this.db) : this.db.isTransaction) this.db.exec('ROLLBACK');
       this.age?.rolledBack();
       if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
       throw error;
@@ -118,7 +119,7 @@ export class RepositoryLedger {
     this.age?.committed();
   }
   rollback(): void {
-    try { if (this.db.isTransaction) this.db.exec('ROLLBACK'); }
+    try { if (this.age ? inTransaction(this.db) : this.db.isTransaction) this.db.exec('ROLLBACK'); }
     finally { this.age?.rolledBack(); }
   }
   row(hash: string): Row | undefined {

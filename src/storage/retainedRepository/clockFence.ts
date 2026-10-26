@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { RepositoryRetentionError } from './contracts.js';
+import { inTransaction } from './transactionState.js';
 
 interface AuthorityOptions {
   readonly version?: number;
@@ -46,7 +47,7 @@ export class ClockAuthority {
 
   /** True permits first schema creation. Existing authority is never repaired in place. */
   requireAuthority(db: DatabaseSync): boolean {
-    if (this.closed || this.ledger || !db.isTransaction) return unconfirmed();
+    if (this.closed || this.ledger || !inTransaction(db)) return unconfirmed();
     this.ledger = db;
     this.ledgerFile = file(join(this.directory, this.ledgerName));
     if (!this.ledgerFile) return unconfirmed();
@@ -64,7 +65,7 @@ export class ClockAuthority {
 
   /** Called only for a new schema, in the same transaction as its policy and clock row. */
   bind(db: DatabaseSync): void {
-    if (this.closed || this.ledger !== db || !db.isTransaction || !this.needsBinding) return unconfirmed();
+    if (this.closed || this.ledger !== db || !inTransaction(db) || !this.needsBinding) return unconfirmed();
     db.exec('CREATE TABLE authority(id INTEGER PRIMARY KEY CHECK(id=1),token TEXT NOT NULL)');
     db.prepare('INSERT INTO authority VALUES(1,?)').run(this.token);
     this.validate(db);
@@ -90,7 +91,7 @@ export class ClockAuthority {
   }
 
   activate(): void {
-    if (this.closed || !this.prepared || !this.ledger || this.ledger.isTransaction) return unconfirmed();
+    if (this.closed || !this.prepared || !this.ledger || inTransaction(this.ledger)) return unconfirmed();
     const current = file(join(this.directory, this.ledgerName));
     if (!current || current.dev !== this.ledgerFile?.dev || current.ino !== this.ledgerFile.ino) return unconfirmed();
     if (this.initializing) {
@@ -103,7 +104,7 @@ export class ClockAuthority {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    try { if (this.db.isTransaction) this.db.exec('ROLLBACK'); }
+    try { if (inTransaction(this.db)) this.db.exec('ROLLBACK'); }
     finally { this.db.close(); }
   }
 }
@@ -142,7 +143,7 @@ export function clockFence(Database: typeof DatabaseSync, directory: string, ret
       options.settings ?? '{"expiryClock":"verified-uptime"}', options.requiredTables ?? [],
       authority.token, authority.state === 'initializing');
   } catch (error) {
-    try { if (db.isTransaction) db.exec('ROLLBACK'); }
+    try { if (inTransaction(db)) db.exec('ROLLBACK'); }
     finally { db.close(); }
     throw error;
   }

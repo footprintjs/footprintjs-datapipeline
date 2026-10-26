@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { DAY, fixture, request, bytes, scopedWrite } from './helpers/history-repository.js';
+import { DAY, fixture, request, bytes, scopedWrite, drainHistory } from './helpers/history-repository.js';
 
 it('keeps original IDs refused after exact membership is retired and the store restarts', async () => {
   const f = await fixture(), original = f.open(0);
@@ -39,10 +39,13 @@ it('reuses capacity and reaches an allocated-byte plateau over four complete his
       // One long-lived host/cleanup clock observes the interval. Reopening a
       // process alone must not invent elapsed age for unknown downtime.
       await maintenance.repository.sweep({ limit: 100 });
+      // A bounded pass can yield under load. The host must drain pending work
+      // before this capacity assertion; one call is not a full-day guarantee.
+      expect(await drainHistory(maintenance.repository)).toMatchObject({ pending: false, blocked: false });
       const current = f.open(day);
       for (let i = 0; i < 1; i++) {
         // This small test isolates repository/page reuse. The separate automated
-        // measurement runs the full Footprint collection flow 256 times.
+        // measurement runs the full Footprint collection flow 512 times.
         const write = await scopedWrite(current.repository, `day-${day}-row-${i}`);
         const result = await current.repository.commit(write);
         expect(result.status, `day ${day}, row ${i}`).toBe('committed');
@@ -52,9 +55,9 @@ it('reuses capacity and reaches an allocated-byte plateau over four complete his
     const late = measured.slice(16);
     expect(Math.max(...late) - Math.min(...late)).toBeLessThanOrEqual(65536);
     expect(Math.max(...late)).toBeLessThan(2 * 1024 * 1024);
-    expect(f.alerts).toEqual([]);
+    expect(f.alerts.filter(event => (event as { code: string }).code !== 'REPOSITORY_HISTORY_PENDING')).toEqual([]);
   } finally { await f.close(); }
-});
+}, 15_000);
 
 it('does not dispatch an old unopened period as new work or silently remint it', async () => {
   const f = await fixture(), previous = f.open(0);

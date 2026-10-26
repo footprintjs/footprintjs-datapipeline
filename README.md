@@ -245,6 +245,9 @@ whole daily periods while a durable prefix keeps old IDs blocked. The laptop
 example chooses seven days; no default, migration, service or cleanup timer is
 added. Reuse the existing repository and explicit maintenance lifecycle. See
 [finite history, crash proof, caps and measured byte plateaus](docs/REPOSITORY_HISTORY.md).
+Hosts can prepare the next verified-age period without authorizing early work.
+Committed maintenance reports pending work through a bounded health advisory;
+the host still owns draining, period selection and alerts for missed maintenance.
 
 ## Development
 

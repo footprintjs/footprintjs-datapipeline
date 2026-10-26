@@ -97,7 +97,7 @@ it('binds new work to the next day without reopening the store or reminting an o
     const today = await pipeline.collect(request('new-slot'));
     expect(today.commit.status).toBe('committed'); expect(today.commit.operationId).toContain(':1:o:');
     await expect(bind(0)).rejects.toMatchObject({ code: 'REPOSITORY_PERIOD_CLOSED' });
-    await expect(bind(2)).rejects.toMatchObject({ code: 'REPOSITORY_PERIOD_CLOSED' });
+    await expect(bind(3)).rejects.toMatchObject({ code: 'REPOSITORY_PERIOD_CLOSED' });
   } finally { await f.close(); }
 });
 

@@ -9,12 +9,12 @@ if (![50, 256].includes(rows) || !Number.isSafeInteger(days) || days < 28 || day
   !Number.isSafeInteger(metadataMiB) || metadataMiB < 2 || metadataMiB > 64) throw Error('Use 50 or 256 rows, 28–64 simulated days and a 2–64 MiB metadata allowance.');
 const directory = await realpath(await mkdtemp(join(tmpdir(), 'laptop-history-measure-')));
 let age = 0, calls = 0;
-const alerts: unknown[] = [], handles: NonNullable<ReturnType<typeof createRetainedFilesystemRepository>>[] = [];
+const alerts: { readonly code: string }[] = [], handles: NonNullable<ReturnType<typeof createRetainedFilesystemRepository>>[] = [];
 const policy = { profile: 'daily-periods-v1' as const, keepDays: 7, namespaceId: 'abcdef0123456789abcdef0123456789', maxOperationBytes: 1024 * 1024 };
 const options = { enabled: true, directory, retentionMs: 7 * DAY, requireSeparateFilesystem: false,
   expiryClock: 'verified-uptime' as const, monotonicClock: () => age, clock: () => 1_790_000_000_000 + age,
   metadataLimits: { maxBytes: metadataMiB * 1024 * 1024, maxOperations: 80, maxReferences: 80 * (rows + 2) },
-  onHealth: (event: unknown) => { alerts.push(event); } };
+  onHealth: (event: { readonly code: string }) => { alerts.push(event); } };
 function open(period: number) {
   const repository = createRetainedFilesystemRepository({ ...options, historyRetirement: { ...policy, period } })!;
   handles.push(repository); return repository;
@@ -65,7 +65,7 @@ try {
     samples.push({ day, ...await usage(directory), operations: capacity.operations, references: capacity.references, maintenanceMs });
 
   }
-  if (alerts.length) throw Error('Unexpected health event');
+  if (alerts.some(event => event.code !== 'REPOSITORY_HISTORY_PENDING')) throw Error('Unexpected health failure');
   const plateauStart = Math.floor(days / 2), settled = samples.slice(plateauStart), allocated = settled.map(sample => sample.allocated);
   const range = Math.max(...allocated) - Math.min(...allocated);
   if (range > 128 * 1024) {
@@ -75,6 +75,7 @@ try {
   console.log(JSON.stringify({ kind: 'synthetic-local-history-cycles', runtime: process.version, cpuCount: cpus().length,
     hostMemoryBytes: totalmem(), rowsPerOperation: rows, simulatedDays: days, operationsPerDay: 8, syntheticAdapterCalls: calls,
     elapsedMs: performance.now() - start, rssStart, rssEnd: process.memoryUsage().rss, metadataLimits: options.metadataLimits,
+    pendingMaintenanceNotifications: alerts.length,
     plateau: { startsAtSimulatedDay: plateauStart, minimumAllocatedBytes: Math.min(...allocated), maximumAllocatedBytes: Math.max(...allocated), rangeBytes: range }, keepDays: 7,
     maximumMaintenanceMs: Math.max(...samples.map(sample => sample.maintenanceMs)), checkpoint: await maintenance.historyStatus(),
     samples, scope: 'Managed repository only, including files, directories and SQLite. No device, InfluxDB, external trace store, real polling cadence or fleet-capacity claim.' }, null, 2));

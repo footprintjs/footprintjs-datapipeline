@@ -48,13 +48,23 @@ new work, the host binds an immutable scope without reopening storage:
 
 ```ts
 const { currentPeriod } = await repository.historyStatus();
-const today = await repository.bindPeriod(currentPeriod);
-const pipelineForNewSlots = createPipeline({ repository: today, /* registries */ });
+const current = await repository.bindPeriod(currentPeriod);
+const next = await repository.bindPeriod(currentPeriod + 1);
+const pipelineForNewSlots = createPipeline({ repository: current, /* registries */ });
+const pipelineForNextPeriod = createPipeline({ repository: next, /* registries */ });
 ```
 
-`bindPeriod` accepts only the current verified period and shares the same open
-connection/serialization. It never mutates an earlier pipeline's identity port.
-A race with a period boundary is a refusal, not an implicit remint.
+`bindPeriod` accepts the current or immediately next verified period and shares
+the same open connection/serialization. Preparing the next scope does not open
+it early: every operation still checks the verified-age boundary, before source
+dispatch and before admitting a first publication. Wall-clock jumps do not
+activate it. These are 24-hour intervals from namespace age zero, not calendar
+days or midnight. Periods beyond the next one are refused.
+
+The host can prepare its next pipeline ahead of the boundary and select it when
+`historyStatus().currentPeriod` reaches that period. No timer or automatic scope
+switch is installed. An earlier pipeline's identity port never changes. A race
+with a period boundary is a refusal, not an implicit remint.
 
 That new scope is **new work**, not an automatic retry. A retry must keep the
 original scope/idempotency key or reconcile its original full operation ID.
@@ -63,7 +73,7 @@ not create another attempt journal. Unknown crash outcomes remain gaps.
 A closed period cannot accept a first publication, including one arriving after
 acquisition crossed its boundary. Preflight is not a reservation: drain before
 changing scopes, and record a boundary refusal through independent health/run
-accounting. No request is moved to today's period to make a retry succeed.
+accounting. No request is moved to the current period to make a retry succeed.
 
 The namespace instance is permanent, not a random value regenerated each start.
 Payload retention, history duration, instance and packed-content limit are
@@ -123,6 +133,21 @@ retirement. Drain it in the separate maintenance worker, yielding between passes
 the API already waits 5 ms **after releasing** its transaction/serial owner so
 other processes can enter their unchanged one-second admission retry window.
 Never run a multi-pass drain inside a poll or use one large outer transaction.
+
+After a committed pass first reports unblocked pending work, `onHealth` receives
+`REPOSITORY_HISTORY_PENDING`. It is an advisory to keep draining, not an error,
+proof of measured lateness or a capacity forecast. Each open handle emits it
+only once per pending episode, then rearms after a pass reports no pending work.
+Missing deletion proof instead emits the existing `REPOSITORY_HISTORY_BLOCKED`.
+A failed transaction does not emit either success-path observation. Throwing or
+asynchronously rejecting health callbacks cannot change the storage result.
+
+This signal also runs when `sweep()` performs its history pass. It is not a
+background monitor: a host that never calls maintenance gets no backlog signal.
+Track pending duration and last successful maintenance independently, alert on
+persistent pending or missed maintenance, and clear the host's pending condition
+after observing a drained result. A restart or second handle may report the same
+pending episode again; callbacks are not a durable delivery protocol.
 
 A partial verification never advances the floor. Only the final verified member
 allows the cumulative checkpoint, retired-prefix fence and first remaining-budget
@@ -250,5 +275,11 @@ operation/reference/page caps bound allocation even if maintenance stops, but
 admission then refuses with a metadata-limit alert; uninterrupted collection is
 not promised. Production approval still requires a configured worker cadence,
 headroom, full payload/summary overlap measurements and the actual store sizes.
+At the reviewed 241,920-operation/day workload, roughly 4,850 retirement passes
+per store per day require a separate drain loop or a pass about every 17 seconds
+or less, in addition to payload cleanup. The reviewed raw and compact metadata
+profiles imply roughly 7 GB combined and about 21 GB including the 3× reserve;
+the compact eight-period size is extrapolated, not measured. These figures are
+workload-specific and exclude payloads, external traces and database data.
 The measured scale report and exact commands are in
 [the review measurement](measurements/repository-history-review-2026-10-23.md).

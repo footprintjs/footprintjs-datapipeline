@@ -13,6 +13,11 @@
   Transactional membership counters avoid admission scans. New work can bind a
   new period without reopening storage or changing previous retry IDs. The
   revised private ledger uses format v4 and refuses earlier v3 namespaces.
+  Hosts may prepare the immediately next verified-age scope while admission
+  still refuses early dispatch and late first writes. Committed maintenance
+  reports unblocked pending work once per open-handle episode through
+  `REPOSITORY_HISTORY_PENDING`; host scheduling and backlog monitoring remain
+  required. The capacity test retains its byte assertions with a longer timeout.
 
 - Optional immutable operation, reference and SQLite control-file limits for
   new verified-uptime retained namespaces. Exhaustion refuses new identities

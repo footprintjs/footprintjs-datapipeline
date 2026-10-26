@@ -26,6 +26,7 @@ export class RetainedFilesystemRepository implements Repository {
   private readonly reads = new RepositoryReadBatcher(refs => this.readMany(refs));
   private publishing?: string;
   private cleanupRunning = false;
+  private historyPendingNotified = false;
   readonly identity?: RepositoryIdentity;
   constructor(private readonly options: RetainedRepositoryOptions) {
     checkOptions(options);
@@ -76,11 +77,12 @@ export class RetainedFilesystemRepository implements Repository {
       throw safe;
     }
   }
-  /** Explicit new-work scope over the same open connection. Never changes old retry IDs. */
+  /** Prepare the current or next verified-age period. Admission still checks its time on every operation. */
   bindPeriod(period: number): Promise<Repository> {
     return this.exclusive(async () => {
       if (!this.options.historyRetirement || !Number.isSafeInteger(period) || period < 0) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
-      if (period !== this.ledger!.historyStatus().currentPeriod) throw new RepositoryRetentionError('REPOSITORY_PERIOD_CLOSED');
+      const current = this.ledger!.historyStatus().currentPeriod;
+      if (period !== current && period !== current + 1) throw new RepositoryRetentionError('REPOSITORY_PERIOD_CLOSED');
       return scopedRepository(this, scopedIdentity({ ...this.options.historyRetirement, period }, this.identity!.assertOperation));
     });
   }
@@ -147,11 +149,16 @@ export class RetainedFilesystemRepository implements Repository {
   historyStatus() { return this.exclusive(async () => this.ledger!.historyStatus()); }
   async retireHistory(options: { limit: number }) {
     if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 100) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
-    const result = await this.exclusive(async () => {
-      const result = this.ledger!.retireHistory(options.limit);
-      if (result.blocked) storageAlert(this.options, 'REPOSITORY_HISTORY_BLOCKED');
-      return result;
-    });
+    const result = await this.exclusive(async () => this.ledger!.retireHistory(options.limit));
+    // Report only committed observations. A normal bounded pass may leave work;
+    // notify once per episode instead of flooding a host that drains thousands
+    // of passes. This is not a timer or a claim about the host's drain rate.
+    if (!result.pending) this.historyPendingNotified = false;
+    if (result.blocked) storageAlert(this.options, 'REPOSITORY_HISTORY_BLOCKED');
+    else if (result.pending && !this.historyPendingNotified) {
+      this.historyPendingNotified = true;
+      storageAlert(this.options, 'REPOSITORY_HISTORY_PENDING');
+    }
     // Yield outside the transaction/serial owner, so a draining worker does not
     // reacquire the lock continuously ahead of another process's admission retry.
     if (result.pending && !result.blocked) await maintenanceYield(5);

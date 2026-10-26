@@ -11,6 +11,8 @@ it('reruns the 256-row history-cycle measurement and checks actual allocated byt
   expect(child.status, child.stderr).toBe(0);
   const result = JSON.parse(child.stdout);
   expect(result.syntheticAdapterCalls).toBe(512); expect(result.keepDays).toBe(7);
+  expect(result.pendingMaintenanceNotifications).toBeGreaterThan(0);
+  expect(result.pendingMaintenanceNotifications).toBeLessThanOrEqual(56);
   expect(result.checkpoint).toMatchObject({ currentPeriod: 63, retireBefore: 56, retiredOperations: 448, retiredReferences: 115584 });
   expect(result.samples).toHaveLength(64);
   for (const sample of result.samples.slice(32)) {

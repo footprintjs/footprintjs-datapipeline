@@ -96,28 +96,27 @@ checks no longer scan all historical operations. Public plain-store behavior is
 unchanged. Packed decompression remains bounded per operation (16 MiB). Returned
 bulk data and caller-held results can still be large; this is not an AI viewer.
 
-## Actual inactive writer proof
+## Validation and capacity planning
 
-`docs/measurements/measure-retained-repository.mts` runs the actual Neo client
-writer against synthetic saved input, with a simulated acknowledged sink. A
-100 ms controlled-clock TTL is solely an expiry test, not a recommendation.
-The same 242 records across 12 operations match a plain repository; four native
-cause answers match reopened traces. Restart performs no new capture/send.
-Expiry removes all operation data while references remain explicitly expired.
+Self-contained repository tests use synthetic library records to verify immutable
+reopening, explicit expiry, interrupted publication recovery and deletion proof.
+Contention tests hold real cleanup at file deletion while independent poll saves
+finish; fault tests preserve unconfirmed outcomes rather than inventing receipts.
+Run the focused checks from this checkout:
 
-| Fresh test namespace | Packed data | SQLite metadata after close | After data expiry |
-| --- | ---: | ---: | ---: |
-| 50 returned / 50 retained clients | 27,452 B | 49,152 B | 49,152 B metadata |
-| 256 returned / 154 retained clients | 71,537 B | 69,632 B | 69,632 B metadata |
+```sh
+npm test -- test/repository-retention.test.ts test/repository-retention-faults.test.ts test/repository-contention.test.ts
+```
 
-Metadata includes fixed namespace startup cost, so **do not multiply these
-one-run SQLite sizes into a daily estimate**. A sustained test must measure
-marginal growth including WAL, tombstones, trace ledger, raw data and gzip files.
-These numbers are not a real cluster measurement or throughput proof.
+A short controlled-clock TTL in a test is not a recommended retention policy.
+Measure sustained marginal growth on the intended host, including packed data,
+reference membership, tombstones, SQLite journals, trace metadata and raw archives.
+One small namespace includes fixed startup costs and cannot establish a daily
+capacity requirement or collection throughput.
 
 This adds expiry, not a repository disk quota. The trace guard limits traces
 only. Independent headroom monitoring, retention choices, capacity sizing and
 sustained host tests remain required before deployment. Old readers cannot
 explain ledger expiry and must never write into or replace managed readers in
-this namespace. Python, mappings, original application flows and services stay
-unchanged. Upgrade readers before enabling any managed storage.
+this namespace. Existing collectors, mappings, application flows and services
+stay unchanged. Upgrade readers before enabling any managed storage.

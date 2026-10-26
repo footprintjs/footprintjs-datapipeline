@@ -2,7 +2,7 @@
 
 The optional `/influxdb` reader imports existing stored data through normal
 `SourceAdapter`, `collect` and repository contracts. It adds no scheduler,
-permissions framework, database, graph or model query generator. PowerScale,
+permissions framework, database, graph or model query generator. Vendor and
 customer schemas and topology meanings belong to application adapters.
 
 ## Register reviewed templates
@@ -121,7 +121,7 @@ calculations remain disabled or use the existing reference transform.
 this library's existing numeric-sample reference, with a true read-only token.
 It uses the existing loopback-only disposable-bucket helper; CI requires that
 server. Local absence is a counted skip, never proof of database equivalence.
-This generic fixture is not yet a PowerScale calculation approval or a claim of
+This generic fixture does not validate vendor-specific calculations or establish
 operation-weighted latency, percentiles, root cause or VM ownership.
 
 No existing file, collector, write policy, retention or application flow changes

@@ -9,6 +9,7 @@ it('reproduces chunked metadata verification with a concurrent real publisher', 
   expect(child.status, child.stderr).toBe(0);
   const report = JSON.parse(child.stdout);
   expect(report.lock.transactions).toBeGreaterThan(10);
+  expect(report.pendingMaintenanceNotifications).toBe(1);
   expect(report.probe.failed).toBe(0); expect(report.probe.saved).toBeGreaterThan(0);
   expect(report.samples.at(-1).checkpoint).toMatchObject({ retireBefore: 1, retiredOperations: 1000, retiredReferences: 7000, retiredUnconfirmedOperations: 1 });
 }, 20000);

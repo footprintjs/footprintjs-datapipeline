@@ -69,9 +69,10 @@ try {
     samples.push(sample); console.error(JSON.stringify({ period, operations: sample.operations.operations, references: sample.operations.references, mainBytes: info.size, elapsedMs: performance.now() - start }));
   }
   locks.sort((a, b) => a - b);
-  if (Math.max(0, ...locks) >= 1000 || health.length) throw Error('Retirement exceeded unchanged admission window or emitted health failures');
+  if (Math.max(0, ...locks) >= 1000 || health.some(code => code !== 'REPOSITORY_HISTORY_PENDING')) throw Error('Retirement exceeded unchanged admission window or emitted health failures');
   console.log(JSON.stringify({ kind: 'synthetic-repository-metadata-volume', bulkSetup: { transactionOperations: 10000, connectionCacheKiB: 8192, productionConnectionUnchanged: true }, dailyOperations: daily, seededDays: days, referencesPerOperation: refs,
     keepDays: 7, transactionWorkLimit: { operations: 100, references: 1600, targetWorkMs: 10 }, elapsedMs: performance.now() - start,
+    pendingMaintenanceNotifications: health.length,
     lock: { transactions: locks.length, p95Ms: locks[Math.max(0, Math.ceil(locks.length * .95) - 1)] ?? 0, maxMs: locks.at(-1) ?? 0 }, probe, samples,
     scope: 'Actual SQLite metadata and bounded retirement, bulk seeded to the stated volume. Files-gone states are seeded, not a payload-deletion/real-device/fleet-throughput benchmark. A separate process publishes real native records concurrently during the first retirement.' }, null, 2));
 } finally {

@@ -9,10 +9,11 @@
   default limit, migration or automatic activation is added.
   This is an emergency admission guard only: metadata growth is not reduced,
   and sealed-period integration remains a required, unimplemented readiness gate.
-  Native ledger `SQLITE_FULL` failures report the limit, including publication
-  acknowledgement, expiry/deletion markers, elapsed checkpoints and final commit;
-  unrelated publication failures keep their unconfirmed meaning. Transient
-  control-file checks run under the writer lock.
+  Native ledger `SQLITE_FULL` failures report the limit, including first-open
+  fence/schema/policy/clock writes, startup commit and budget activation,
+  publication acknowledgement, expiry/deletion markers, elapsed checkpoints and
+  final commit; unrelated publication failures keep their unconfirmed meaning.
+  Transient control-file checks run under the writer lock.
 
 - Retry a busy final SQLite COMMIT asynchronously, including verified-uptime
   expiry and deletion acknowledgements. Checkpoints and publication are not

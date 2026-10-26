@@ -23,7 +23,11 @@ export class RepositoryLedger {
     const guarded = options?.expiryClock === 'verified-uptime';
     if (guarded) {
       try { clockFence(DatabaseSync, directory, retentionMs); }
-      catch (error) { if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY'); throw error; }
+      catch (error) {
+        if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+        if (options.metadataLimits) metadataWriteFailure(error);
+        throw error;
+      }
     }
     const path = join(directory, guarded ? 'retention-v2.sqlite' : 'retention.sqlite');
     this.db = new DatabaseSync(path);
@@ -57,6 +61,8 @@ export class RepositoryLedger {
       if (this.db.isTransaction) this.db.exec('ROLLBACK');
       this.db.close();
       if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+      // Startup writes can fail before the budget has been constructed.
+      if (options?.metadataLimits) metadataWriteFailure(error);
       throw error;
     }
   }

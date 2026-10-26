@@ -39,8 +39,10 @@ DELETE journaling with cache spilling disabled; both settings are checked on
 admission, so a reader cannot pin an ever-growing WAL. Transient control files
 are checked after acquiring the writer lock, so another handle cannot remove its
 journal during that check. A native `SQLITE_FULL` raised by a ledger write is
-`REPOSITORY_METADATA_LIMIT`, including the new intent, publication acknowledgement,
-expiry/deletion markers, elapsed checkpoint or final commit. This also applies
+`REPOSITORY_METADATA_LIMIT`, including first-open fence/schema/policy/clock writes,
+startup commit and budget activation, new intents, publication acknowledgement,
+expiry/deletion markers, elapsed checkpoint or final commit. Startup uses the
+configured limits even before the budget is active. This also applies
 when SQLite has already rolled the transaction back. A publication-side failure
 remains `REPOSITORY_UNCONFIRMED`, even if its error happens to carry the same
 number. Neither outcome is permission to retry a publication or an uncertain send.

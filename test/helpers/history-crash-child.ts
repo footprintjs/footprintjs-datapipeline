@@ -16,7 +16,7 @@ try {
     const exec = DatabaseSync.prototype.exec;
     DatabaseSync.prototype.exec = function (sql: string) {
       exec.call(this, sql);
-      if (sql === 'COMMIT') process.kill(process.pid, 'SIGKILL'); // committed initializing fence, before actual ledger
+      if (sql === 'COMMIT; BEGIN IMMEDIATE') process.kill(process.pid, 'SIGKILL'); // committed initializing fence, before actual ledger
     };
     await repo.historyStatus();
   } else if (phase === 'before-commit') {

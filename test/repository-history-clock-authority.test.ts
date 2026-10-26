@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { createPipeline } from '../src/createPipeline.js';
 import type { Repository } from '../src/ports.js';
-import { DAY, fixture, request, scopedWrite } from './helpers/history-repository.js';
+import { DAY, fixture, request, scopedWrite, drainHistory } from './helpers/history-repository.js';
 
 function collecting(repository: Repository, acquire: () => void) {
   return createPipeline({ repository,
@@ -54,6 +54,7 @@ it('cannot charge an old handle\'s idle interval to newly accepted payloads or t
     expect(await newer.repository.receipt(write.operationId)).toMatchObject({ dataDeleted: true });
     f.at(acceptedAt + 2 * DAY);
     expect(await older.repository.sweep({ limit: 10 })).toEqual({ deleted: 0 });
+    expect(await drainHistory(older.repository, 10)).toMatchObject({ pending: false, blocked: false });
     expect(await older.repository.historyStatus()).toMatchObject({ currentPeriod: 2, retireBefore: 1, retiredOperations: 1 });
     await expect(newer.repository.receipt(write.operationId)).rejects.toMatchObject({ code: 'REPOSITORY_HISTORY_UNAVAILABLE' });
     expect(await older.repository.metadataCapacity({ operations: 0, references: 0 })).toMatchObject({ operations: 0, references: 0 });
@@ -98,7 +99,9 @@ it('refuses the rounded closing fraction without a partial intent or early admis
     const current = collecting(await publisher.repository.bindPeriod(0), () => { calls++; });
     const next = collecting(await publisher.repository.bindPeriod(1), () => { calls++; });
     const closing = await current.collect(request('closing-fraction'));
-    expect(closing.commit.status).toBe('failed');
+    // Collection ran before the publication refusal; the pipeline conservatively
+    // reports unknown, while the repository confirms no intent was accepted.
+    expect(closing.commit.status).toBe('unknown');
     expect(calls).toBe(1);
     expect(await publisher.repository.receipt(closing.commit.operationId)).toBeUndefined();
     expect(await publisher.repository.metadataCapacity({ operations: 0, references: 0 })).toMatchObject({ operations: 0, references: 0 });

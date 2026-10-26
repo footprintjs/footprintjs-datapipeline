@@ -50,6 +50,9 @@ it('reuses capacity and reaches an allocated-byte plateau over four complete his
         const result = await current.repository.commit(write);
         expect(result.status, `day ${day}, row ${i}`).toBe('committed');
       }
+      // Transfer observation to maintenance at this acceptance boundary. The next
+      // interval is then known to begin after the newly accepted payload.
+      await maintenance.repository.historyStatus();
       measured.push(await bytes(f.directory)); current.repository.close();
     }
     const late = measured.slice(16);

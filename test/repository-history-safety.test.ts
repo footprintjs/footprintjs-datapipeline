@@ -199,7 +199,7 @@ it.each(['policy', 'elapsed_clock', 'retired_history'])('refuses a missing activ
     try { expect(inspect.prepare(`SELECT 1 FROM ${table} WHERE id=1`).get()).toBeUndefined(); } finally { inspect.close(); }
   } finally { await f.close(); }
 });
-it.each(['DROP TABLE history_namespace', 'DELETE FROM history_namespace WHERE id=1'])('does not recreate a missing namespace witness: %s', async command => {
+it.each(['DROP TABLE clock_authority', 'DELETE FROM clock_authority WHERE id=1'])('does not recreate a missing namespace witness: %s', async command => {
   const f = await fixture(), first = f.open(0);
   try {
     await first.pipeline.collect(request('saved')); first.repository.close();

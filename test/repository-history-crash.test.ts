@@ -23,7 +23,7 @@ it('resumes a killed first initialization without deleting a lock or resetting a
   try {
     expect((await once(child, 'exit'))[1]).toBe('SIGKILL');
     const fence = new DatabaseSync(join(f.directory, 'retention.sqlite'));
-    try { expect(fence.prepare('SELECT state FROM history_namespace WHERE id=1').get()).toMatchObject({ state: 'initializing' }); }
+    try { expect(fence.prepare('SELECT state FROM clock_authority WHERE id=1').get()).toMatchObject({ state: 'initializing' }); }
     finally { fence.close(); }
     await expect(access(join(f.directory, 'retention-v4.sqlite'))).rejects.toMatchObject({ code: 'ENOENT' });
     const resumed = f.open(0);

@@ -55,7 +55,7 @@ function failSqliteWriteOnce(sql: string, armed: () => boolean = () => true) {
 
 it.each([
   "UPDATE operations SET status='stored',confirmed=1 WHERE operationHash=?",
-  'UPDATE elapsed_clock SET ageMs=? WHERE id=1 AND ageMs<=?',
+  'UPDATE elapsed_clock SET ageMs=?,revision=? WHERE id=1',
   'COMMIT',
 ])('reports metadata exhaustion after native publication at %s without replaying it', async sql => {
   const f = await fixture(10);

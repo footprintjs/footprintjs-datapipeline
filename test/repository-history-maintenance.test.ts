@@ -84,7 +84,9 @@ it('reports pending work once per episode, resets after draining, and reports a 
   const f = await fixture(), maintenance = f.open(0);
   try {
     await maintenance.repository.historyStatus();
-    await saveThree(f, 0, 'first'); f.at(DAY);
+    await saveThree(f, 0, 'first');
+    // Observe the new acceptance generation before advancing the test clock.
+    await maintenance.repository.historyStatus(); f.at(DAY);
     await maintenance.repository.sweep({ limit: 100 });
     expect(historyAlerts(f.alerts)).toEqual([]);
     f.at(8 * DAY);
@@ -96,7 +98,8 @@ it('reports pending work once per episode, resets after draining, and reports a 
     await maintenance.repository.retireHistory({ limit: 1 });
     expect(pendingAlerts(f.alerts)).toHaveLength(1);
 
-    await saveThree(f, 8, 'second'); f.at(9 * DAY);
+    await saveThree(f, 8, 'second');
+    await maintenance.repository.historyStatus(); f.at(9 * DAY);
     await maintenance.repository.sweep({ limit: 100 }); f.at(16 * DAY);
     expect(await maintenance.repository.retireHistory({ limit: 1 })).toMatchObject({ pending: true, blocked: false });
     expect(pendingAlerts(f.alerts)).toHaveLength(2);
@@ -109,7 +112,8 @@ it('surfaces pending history through sweep even though its return value only rep
   const f = await fixture(), maintenance = f.open(0);
   try {
     await maintenance.repository.historyStatus();
-    await saveThree(f, 0, 'sweep'); f.at(DAY);
+    await saveThree(f, 0, 'sweep');
+    await maintenance.repository.historyStatus(); f.at(DAY);
     await maintenance.repository.sweep({ limit: 100 }); f.at(8 * DAY);
     expect(await maintenance.repository.sweep({ limit: 1 })).toEqual({ deleted: 0 });
     expect(pendingAlerts(f.alerts)).toEqual([{ code: 'REPOSITORY_HISTORY_PENDING' }]);
@@ -126,7 +130,8 @@ it.each(['sync', 'async'] as const)('keeps maintenance successful when its pendi
   const maintenance = f.open(0);
   try {
     await maintenance.repository.historyStatus();
-    await saveThree(f, 0, 'callback'); f.at(DAY);
+    await saveThree(f, 0, 'callback');
+    await maintenance.repository.historyStatus(); f.at(DAY);
     await maintenance.repository.sweep({ limit: 100 }); f.at(8 * DAY);
     expect(await maintenance.repository.retireHistory({ limit: 1 })).toMatchObject({ pending: true, blocked: false });
     expect(await drainHistory(maintenance.repository, 1)).toMatchObject({ pending: false, blocked: false });
@@ -139,7 +144,8 @@ it('reports newly unblocked pending work without treating the earlier blocked st
   const f = await fixture(), maintenance = f.open(0);
   try {
     await maintenance.repository.historyStatus();
-    await saveThree(f, 0, 'not-deleted'); f.at(8 * DAY);
+    await saveThree(f, 0, 'not-deleted');
+    await maintenance.repository.historyStatus(); f.at(8 * DAY);
     expect(await maintenance.repository.retireHistory({ limit: 1 })).toMatchObject({ pending: true, blocked: true });
     expect(historyAlerts(f.alerts)).toEqual([{ code: 'REPOSITORY_HISTORY_BLOCKED' }]);
     // Delete all three payloads, then spend the pass's three-operation budget
@@ -157,6 +163,7 @@ it.each(['pending', 'blocked'] as const)('does not announce %s retirement when f
   try {
     await maintenance.repository.historyStatus();
     await saveThree(f, 0, 'failed-commit');
+    await maintenance.repository.historyStatus();
     if (outcome === 'pending') { f.at(DAY); await maintenance.repository.sweep({ limit: 100 }); }
     f.at(8 * DAY);
     const exec = DatabaseSync.prototype.exec; let commits = 0;

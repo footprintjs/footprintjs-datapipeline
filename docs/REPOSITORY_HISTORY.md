@@ -177,12 +177,23 @@ Choose the operation count and content ceiling together, and retain independent
 free-space protection. These bounds do not make arbitrary traffic fit in a small
 laptop disk or govern external traces, InfluxDB, unrelated files or other apps.
 
-This revision uses `retention-v4.sqlite` and a version-4 legacy-reader fence.
-It does not adopt the earlier unpublished v3 namespaces. The period-scoped ID
+Acceptance uses the shared revision protocol described in
+[repository retention](REPOSITORY_RETENTION.md). A new accepted intent invalidates
+other handles' elapsed time from before that acceptance. Reads and maintenance
+preserve a continuous publisher's clock; alternating publishers can discard
+ambiguous intervals and delay expiry and history retirement indefinitely. There
+is no minimum age-progress rate or wall-time capacity guarantee. The historical
+capacity measurements below describe their measured single-clock workload.
+Acceptance rounds up and expiry rounds down. In the final fractional millisecond
+of a period, a first write may conservatively be refused until the next period;
+prepared next-period scopes still cannot dispatch before the actual boundary.
+
+This revision uses `retention-v4.sqlite` and a format-6 legacy-reader fence.
+It does not adopt earlier unpublished verified-clock formats. The period-scoped ID
 spelling is unchanged, while the new format fences older managed binaries. Old managed
 constructors refuse it; no legacy directory is adopted, IDs rewritten or age
 inferred. An active fence with a missing ledger, or a ledger with a missing fence,
-is unavailable and is never silently recreated as empty history. Active authority
+is unavailable and is never silently recreated as empty history. A durable initialization identity binds the fence and ledger. Active authority
 tables and their checkpoint/clock/policy rows are checked before initialization
 statements; missing facts are not replaced with zeroes. Interrupted first
 initialization can resume before any publisher was admitted. Refused pipeline

@@ -12,12 +12,22 @@
   saves whose files are confirmed gone; uncertainty is counted separately.
   Transactional membership counters avoid admission scans. New work can bind a
   new period without reopening storage or changing previous retry IDs. The
-  revised private ledger uses format v4 and refuses earlier v3 namespaces.
+  revised private ledger uses format 6 and refuses earlier unpublished formats.
   Hosts may prepare the immediately next verified-age scope while admission
   still refuses early dispatch and late first writes. Committed maintenance
   reports unblocked pending work once per open-handle episode through
   `REPOSITORY_HISTORY_PENDING`; host scheduling and backlog monitoring remain
   required. The capacity test retains its byte assertions with a longer timeout.
+- Correct verified-age attribution across staggered handles. Each new accepted
+  intent advances a durable revision; other handles discard ambiguous earlier
+  elapsed time. Reads and maintenance preserve a publisher's continuous clock.
+  Transaction rollback and failed COMMIT never grant new clock authority.
+  Acceptance rounds up to avoid fractional-millisecond early expiry. Alternating
+  publishers may extend retention; no minimum age-progress rate is promised.
+- New verified namespaces use format 5 with durable initializing/active authority
+  and a bound ledger identity. Missing active metadata fails closed on reopen;
+  interrupted initial setup can recover. Older unpublished verified formats are
+  refused, not migrated. Existing wall-clock namespaces are unchanged.
 
 - Optional immutable operation, reference and SQLite control-file limits for
   new verified-uptime retained namespaces. Exhaustion refuses new identities
@@ -27,10 +37,11 @@
   This is an emergency admission guard only: metadata growth is not reduced,
   without the separate opt-in finite-history profile. Host integration and
   sustained maintenance capacity remain readiness gates.
-  Native ledger `SQLITE_FULL` failures report the limit, including publication
-  acknowledgement, expiry/deletion markers, elapsed checkpoints and final commit;
-  unrelated publication failures keep their unconfirmed meaning. Transient
-  control-file checks run under the writer lock.
+  Native ledger `SQLITE_FULL` failures report the limit, including first-open
+  fence/schema/policy/clock writes, startup commit and budget activation,
+  publication acknowledgement, expiry/deletion markers, elapsed checkpoints and
+  final commit; unrelated publication failures keep their unconfirmed meaning.
+  Transient control-file checks run under the writer lock.
 
 - Retry a busy final SQLite COMMIT asynchronously, including verified-uptime
   expiry and deletion acknowledgements. Checkpoints and publication are not

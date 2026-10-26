@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Correct verified-age attribution across staggered handles. Each new accepted
+  intent advances a durable revision; other handles discard ambiguous earlier
+  elapsed time. Reads and maintenance preserve a publisher's continuous clock.
+  Transaction rollback and failed COMMIT never grant new clock authority.
+  Acceptance rounds up to avoid fractional-millisecond early expiry. Alternating
+  publishers may extend retention; no minimum age-progress rate is promised.
+- New verified namespaces use format 5 with durable initializing/active authority
+  and a bound ledger identity. Missing active metadata fails closed on reopen;
+  interrupted initial setup can recover. Older unpublished verified formats are
+  refused, not migrated. Existing wall-clock namespaces are unchanged.
+
 - Retry a busy final SQLite COMMIT asynchronously, including verified-uptime
   expiry and deletion acknowledgements. Checkpoints and publication are not
   replayed; exhausted locks keep their fixed busy diagnostic.

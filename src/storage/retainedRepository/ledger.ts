@@ -20,27 +20,38 @@ export class RepositoryLedger {
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
     const guarded = options?.expiryClock === 'verified-uptime';
     if (guarded) {
-      try { clockFence(DatabaseSync, directory, retentionMs); }
-      catch (error) { if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY'); throw error; }
+      let authority: ReturnType<typeof clockFence> | undefined;
+      let db: DatabaseSync | undefined;
+      try {
+        authority = clockFence(DatabaseSync, directory, retentionMs);
+        const path = join(directory, 'retention-v2.sqlite');
+        this.db = db = new DatabaseSync(path);
+        chmodSync(path, 0o600);
+        db.exec('PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=0; BEGIN IMMEDIATE');
+        if (authority.requireAuthority(db)) {
+          db.exec(`CREATE TABLE policy(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,retentionMs INTEGER NOT NULL,settings TEXT NOT NULL);
+            CREATE TABLE operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0,acceptedAgeMs INTEGER NOT NULL,expiresAgeMs INTEGER NOT NULL);
+            CREATE INDEX expiry ON operations(expiresAgeMs) WHERE dataDeleted=0;
+            CREATE TABLE refs(refHash TEXT PRIMARY KEY,operationHash TEXT NOT NULL);
+            CREATE TABLE elapsed_clock(id INTEGER PRIMARY KEY CHECK(id=1),ageMs INTEGER NOT NULL,revision INTEGER NOT NULL);`);
+          db.prepare('INSERT INTO policy VALUES(1,5,?,?)').run(retentionMs, '{"expiryClock":"verified-uptime"}');
+          db.exec('INSERT INTO elapsed_clock VALUES(1,0,0)');
+          authority.bind(db);
+        }
+        this.age = new ElapsedAge(db, options.monotonicClock ?? (() => performance.now()));
+        db.exec('COMMIT');
+        authority.activate();
+        return;
+      } catch (error) {
+        if (db) { try { if (db.isTransaction) db.exec('ROLLBACK'); } finally { db.close(); } }
+        if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+        throw error;
+      } finally { authority?.close(); }
     }
-    const path = join(directory, guarded ? 'retention-v2.sqlite' : 'retention.sqlite');
+    const path = join(directory, 'retention.sqlite');
     this.db = new DatabaseSync(path);
     try {
       chmodSync(path, 0o600);
-      if (guarded) {
-        this.db.exec(`PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=0; BEGIN IMMEDIATE;
-          CREATE TABLE IF NOT EXISTS policy(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,retentionMs INTEGER NOT NULL,settings TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0,acceptedAgeMs INTEGER NOT NULL,expiresAgeMs INTEGER NOT NULL);
-          CREATE INDEX IF NOT EXISTS expiry ON operations(expiresAgeMs) WHERE dataDeleted=0;
-          CREATE TABLE IF NOT EXISTS refs(refHash TEXT PRIMARY KEY,operationHash TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS elapsed_clock(id INTEGER PRIMARY KEY CHECK(id=1),ageMs INTEGER NOT NULL);`);
-        this.db.prepare('INSERT OR IGNORE INTO policy VALUES(1,2,?,?)').run(retentionMs, '{"expiryClock":"verified-uptime"}');
-        const policy = this.db.prepare('SELECT * FROM policy WHERE id=1').get();
-        if (policy?.version !== 2 || policy.retentionMs !== retentionMs || policy.settings !== '{"expiryClock":"verified-uptime"}') throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
-        this.db.exec('INSERT OR IGNORE INTO elapsed_clock VALUES(1,0); COMMIT');
-        this.age = new ElapsedAge(this.db, options.monotonicClock ?? (() => performance.now()));
-        return;
-      }
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=0;
         CREATE TABLE IF NOT EXISTS policy(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,retentionMs INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0);
@@ -60,6 +71,7 @@ export class RepositoryLedger {
     try { this.db.exec('BEGIN IMMEDIATE'); this.age?.begin(); }
     catch (error) {
       if (this.db.isTransaction) this.db.exec('ROLLBACK');
+      this.age?.rolledBack();
       if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
       throw error;
     }
@@ -76,8 +88,12 @@ export class RepositoryLedger {
         throw error;
       }
     });
+    this.age?.committed();
   }
-  rollback(): void { if (this.db.isTransaction) this.db.exec('ROLLBACK'); }
+  rollback(): void {
+    try { if (this.db.isTransaction) this.db.exec('ROLLBACK'); }
+    finally { this.age?.rolledBack(); }
+  }
   row(hash: string): Row | undefined {
     const row = this.db.prepare('SELECT * FROM operations WHERE operationHash=?').get(hash);
     if (!row) return undefined;
@@ -97,7 +113,7 @@ export class RepositoryLedger {
   }
   intent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number): void {
     if (this.age) {
-      const age = this.age.now();
+      const age = this.age.acceptedNow();
       if (!Number.isSafeInteger(age + retentionMs)) throw new RepositoryRetentionError('REPOSITORY_CLOCK_UNAVAILABLE');
       this.db.prepare("INSERT INTO operations VALUES(?,?,?,?,?,'pending',0,0,?,?)").run(hash, fingerprint, writeHash, now, now + retentionMs, age, age + retentionMs);
     } else this.db.prepare("INSERT INTO operations VALUES(?,?,?,?,?,'pending',0,0)").run(hash, fingerprint, writeHash, now, now + retentionMs);

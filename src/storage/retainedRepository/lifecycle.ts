@@ -4,6 +4,9 @@ import { prepareDirectory } from '../guardedTrace/paths.js';
 import { RepositoryRetentionError, type RetainedRepositoryOptions } from './contracts.js';
 export function checkOptions(options: RetainedRepositoryOptions): void {
   if (!Number.isSafeInteger(options.retentionMs) || options.retentionMs < 1 || typeof options.onHealth !== 'function') throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+  if ((options.expiryClock !== undefined && options.expiryClock !== 'verified-uptime') ||
+    (options.monotonicClock !== undefined && (options.expiryClock !== 'verified-uptime' || typeof options.monotonicClock !== 'function'))) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+  if (options.monotonicClock && (options.monotonicClock === Date.now || options.monotonicClock === options.clock)) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
 }
 export function time(options: RetainedRepositoryOptions): number {
   const now = (options.clock ?? Date.now)();
@@ -12,6 +15,13 @@ export function time(options: RetainedRepositoryOptions): number {
 }
 export async function readyDirectory(options: RetainedRepositoryOptions): Promise<string> {
   const path = await prepareDirectory(options);
+  try {
+    await lstat(join(path, 'retention-v2.sqlite'));
+    try { await lstat(join(path, 'retention.sqlite')); }
+    catch { throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); }
+  } catch (error) { if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error; }
+  try { if ((await lstat(join(path, 'retention-v2.sqlite'))).isSymbolicLink()) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); }
+  catch (error) { if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error; }
   try { if ((await lstat(join(path, 'operations'))).isSymbolicLink()) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); }
   catch (error) { if ((error as NodeJS.ErrnoException)?.code !== 'ENOENT') throw error; }
   try { await lstat(join(path, 'retention.sqlite')); }

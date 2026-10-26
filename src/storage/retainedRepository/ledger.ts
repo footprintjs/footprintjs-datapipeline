@@ -2,7 +2,11 @@ import { createRequire } from 'node:module';
 import { chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import { RepositoryRetentionError, type RepositoryRetentionReceipt } from './contracts.js';
+import { RepositoryRetentionError, type RepositoryRetentionReceipt, type RetainedRepositoryOptions } from './contracts.js';
+import { ElapsedAge } from './elapsedAge.js';
+import { clockFence } from './clockFence.js';
+import { admitTransaction } from './admission.js';
+import { inTransaction } from './transactionState.js';
 export interface Row extends RepositoryRetentionReceipt { fingerprint: string; writeHash: string }
 function isBusy(error: unknown): boolean {
   if ((typeof error !== 'object' && typeof error !== 'function') || error === null) return false;
@@ -12,11 +16,43 @@ function isBusy(error: unknown): boolean {
 /** Content-free durable ownership, pending intents and expiry tombstones. */
 export class RepositoryLedger {
   private readonly db: DatabaseSync;
-  constructor(directory: string, private readonly retentionMs: number) {
+  private readonly age?: ElapsedAge;
+  constructor(directory: string, private readonly retentionMs: number, options?: RetainedRepositoryOptions) {
     const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
-    this.db = new DatabaseSync(join(directory, 'retention.sqlite'));
+    const guarded = options?.expiryClock === 'verified-uptime';
+    if (guarded) {
+      let authority: ReturnType<typeof clockFence> | undefined;
+      let db: DatabaseSync | undefined;
+      try {
+        authority = clockFence(DatabaseSync, directory, retentionMs);
+        const path = join(directory, 'retention-v2.sqlite');
+        this.db = db = new DatabaseSync(path);
+        chmodSync(path, 0o600);
+        db.exec('PRAGMA journal_mode=DELETE; PRAGMA synchronous=EXTRA; PRAGMA busy_timeout=0; BEGIN IMMEDIATE');
+        if (authority.requireAuthority(db)) {
+          db.exec(`CREATE TABLE policy(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,retentionMs INTEGER NOT NULL,settings TEXT NOT NULL);
+            CREATE TABLE operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0,acceptedAgeMs INTEGER NOT NULL,expiresAgeMs INTEGER NOT NULL);
+            CREATE INDEX expiry ON operations(expiresAgeMs) WHERE dataDeleted=0;
+            CREATE TABLE refs(refHash TEXT PRIMARY KEY,operationHash TEXT NOT NULL);
+            CREATE TABLE elapsed_clock(id INTEGER PRIMARY KEY CHECK(id=1),ageMs INTEGER NOT NULL,revision INTEGER NOT NULL);`);
+          db.prepare('INSERT INTO policy VALUES(1,5,?,?)').run(retentionMs, '{"expiryClock":"verified-uptime"}');
+          db.exec('INSERT INTO elapsed_clock VALUES(1,0,0)');
+          authority.bind(db);
+        }
+        this.age = new ElapsedAge(db, options.monotonicClock ?? (() => performance.now()));
+        db.exec('COMMIT');
+        authority.activate();
+        return;
+      } catch (error) {
+        if (db) { try { if (inTransaction(db)) db.exec('ROLLBACK'); } finally { db.close(); } }
+        if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+        throw error;
+      } finally { authority?.close(); }
+    }
+    const path = join(directory, 'retention.sqlite');
+    this.db = new DatabaseSync(path);
     try {
-      chmodSync(join(directory, 'retention.sqlite'), 0o600);
+      chmodSync(path, 0o600);
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=0;
         CREATE TABLE IF NOT EXISTS policy(id INTEGER PRIMARY KEY CHECK(id=1),version INTEGER NOT NULL,retentionMs INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS operations(operationHash TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,writeHash TEXT NOT NULL,acceptedAt INTEGER NOT NULL,expiresAt INTEGER NOT NULL,status TEXT NOT NULL,dataDeleted INTEGER NOT NULL DEFAULT 0,confirmed INTEGER NOT NULL DEFAULT 0);
@@ -26,17 +62,39 @@ export class RepositoryLedger {
       const policy = this.db.prepare('SELECT version,retentionMs FROM policy WHERE id=1').get()!;
       if (policy.version !== 1 || policy.retentionMs !== retentionMs) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
     } catch (error) {
+      if (this.db.isTransaction) this.db.exec('ROLLBACK');
       this.db.close();
       if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
       throw error;
     }
   }
   begin(): void {
-    try { this.db.exec('BEGIN IMMEDIATE'); }
-    catch (error) { if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY'); throw error; }
+    try { this.db.exec('BEGIN IMMEDIATE'); this.age?.begin(); }
+    catch (error) {
+      if (this.age ? inTransaction(this.db) : this.db.isTransaction) this.db.exec('ROLLBACK');
+      this.age?.rolledBack();
+      if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+      throw error;
+    }
   }
-  commit(): void { this.db.exec('COMMIT'); }
-  rollback(): void { this.db.exec('ROLLBACK'); }
+  async commit(): Promise<void> {
+    this.age?.checkpoint();
+    // DELETE-journal readers can block COMMIT after BEGIN IMMEDIATE succeeded.
+    // SQLITE_BUSY leaves this transaction open. Retry only COMMIT, once the
+    // checkpoint and all native publication/cleanup effects have already run.
+    await admitTransaction(() => {
+      try { this.db.exec('COMMIT'); }
+      catch (error) {
+        if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
+        throw error;
+      }
+    });
+    this.age?.committed();
+  }
+  rollback(): void {
+    try { if (this.age ? inTransaction(this.db) : this.db.isTransaction) this.db.exec('ROLLBACK'); }
+    finally { this.age?.rolledBack(); }
+  }
   row(hash: string): Row | undefined {
     const row = this.db.prepare('SELECT * FROM operations WHERE operationHash=?').get(hash);
     if (!row) return undefined;
@@ -45,20 +103,33 @@ export class RepositoryLedger {
       Number(row.expiresAt) - Number(row.acceptedAt) !== this.retentionMs || !['pending', 'stored', 'expired'].includes(String(row.status)) ||
       ![0, 1].includes(Number(row.confirmed)) || (row.status === 'stored' && row.confirmed !== 1) ||
       ![0, 1].includes(Number(row.dataDeleted)) || (row.dataDeleted === 1 && row.status !== 'expired')) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
-    return { ...row, publication: row.confirmed === 1 ? 'committed' : 'unconfirmed', dataDeleted: row.dataDeleted === 1 } as unknown as Row;
+    if (this.age && (!Number.isSafeInteger(row.acceptedAgeMs) || Number(row.acceptedAgeMs) < 0 ||
+      !Number.isSafeInteger(row.expiresAgeMs) || Number(row.expiresAgeMs) - Number(row.acceptedAgeMs) !== this.retentionMs)) throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
+    return { ...row, publication: row.confirmed === 1 ? 'committed' : 'unconfirmed', dataDeleted: row.dataDeleted === 1,
+      ...(this.age ? { expiryClock: 'verified-uptime' } : {}) } as unknown as Row;
   }
   owner(refHash: string): Row | undefined {
     const row = this.db.prepare('SELECT operationHash FROM refs WHERE refHash=?').get(refHash);
     return row ? this.row(String(row.operationHash)) : undefined;
   }
   intent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number): void {
-    this.db.prepare("INSERT INTO operations VALUES(?,?,?,?,?,'pending',0,0)").run(hash, fingerprint, writeHash, now, now + retentionMs);
+    if (this.age) {
+      const age = this.age.acceptedNow();
+      if (!Number.isSafeInteger(age + retentionMs)) throw new RepositoryRetentionError('REPOSITORY_CLOCK_UNAVAILABLE');
+      this.db.prepare("INSERT INTO operations VALUES(?,?,?,?,?,'pending',0,0,?,?)").run(hash, fingerprint, writeHash, now, now + retentionMs, age, age + retentionMs);
+    } else this.db.prepare("INSERT INTO operations VALUES(?,?,?,?,?,'pending',0,0)").run(hash, fingerprint, writeHash, now, now + retentionMs);
     const insert = this.db.prepare('INSERT INTO refs VALUES(?,?)');
     for (const ref of refs) insert.run(ref, hash);
   }
   stored(hash: string): void { this.db.prepare("UPDATE operations SET status='stored',confirmed=1 WHERE operationHash=?").run(hash); }
   expired(hash: string): void { this.db.prepare("UPDATE operations SET status='expired' WHERE operationHash=?").run(hash); }
   deleted(hash: string): void { this.db.prepare('UPDATE operations SET dataDeleted=1 WHERE operationHash=?').run(hash); }
-  candidates(now: number, limit: number): Row[] { return (this.db.prepare("SELECT operationHash FROM operations WHERE (expiresAt<=? OR status='expired') AND dataDeleted=0 ORDER BY expiresAt,operationHash LIMIT ?").all(now, limit)).map(row => this.row(String(row.operationHash))!); }
+  expiredAt(row: Row, wall: number): boolean { return row.status === 'expired' || (this.age ? row.expiresAgeMs! <= this.age.now() : row.expiresAt <= wall); }
+  wallBased(): boolean { return !this.age; }
+  candidates(now: number, limit: number): Row[] {
+    const field = this.age ? 'expiresAgeMs' : 'expiresAt';
+    return this.db.prepare(`SELECT operationHash FROM operations WHERE (${field}<=? OR status='expired') AND dataDeleted=0 ORDER BY ${field},operationHash LIMIT ?`)
+      .all(this.age ? this.age.now() : now, limit).map(row => this.row(String(row.operationHash))!);
+  }
   close(): void { this.db.close(); }
 }

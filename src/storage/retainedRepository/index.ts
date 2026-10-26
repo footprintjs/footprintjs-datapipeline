@@ -26,16 +26,16 @@ export class RetainedFilesystemRepository implements Repository {
   constructor(private readonly options: RetainedRepositoryOptions) { checkOptions(options); this.options = Object.freeze({ ...options }); }
   private fresh = (row: Row): void => {
     const now = time(this.options);
-    if (row.status === 'expired' || row.expiresAt <= now) {
+    if (this.ledger!.expiredAt(row, now)) {
       this.ledger!.expired(row.operationHash);
       throw new RepositoryRetentionError('REPOSITORY_EXPIRED');
     }
-    if (now < row.acceptedAt) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
+    if (this.ledger!.wallBased() && now < row.acceptedAt) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
   };
   private async ready(): Promise<void> {
     if (this.ledger) return;
     this.path = await readyDirectory(this.options);
-    this.ledger = new RepositoryLedger(this.path, this.options.retentionMs);
+    this.ledger = new RepositoryLedger(this.path, this.options.retentionMs, this.options);
     const { IndexedData } = await import('./indexedData.js');
     this.data = new IndexedData(this.path, refs => readOwned(refs, this.ledger!, this.data!, this.fresh, this.publishing));
   }
@@ -47,14 +47,17 @@ export class RetainedFilesystemRepository implements Repository {
     let begun = false;
     try {
       await admitTransaction(async () => { await this.ready(); this.ledger!.begin(); }); begun = true;
-      const result = await fn(); this.ledger!.commit(); begun = false; return result;
+      const result = await fn(); await this.ledger!.commit(); begun = false; return result;
     } catch (error) {
       let failure = error;
       if (begun) {
         try {
-          if (error instanceof RepositoryRetentionError && error.code === 'REPOSITORY_EXPIRED') this.ledger!.commit();
+          if (error instanceof RepositoryRetentionError && error.code === 'REPOSITORY_EXPIRED') await this.ledger!.commit();
           else this.ledger!.rollback();
-        } catch { failure = new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); }
+        } catch (commitError) {
+          failure = commitError instanceof RepositoryRetentionError ? commitError : new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
+          try { this.ledger!.rollback(); } catch { failure = new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); }
+        }
       }
       const safe = failure instanceof RepositoryRetentionError || failure instanceof FilesystemRepositoryError ? failure : new RepositoryRetentionError('REPOSITORY_UNCONFIRMED');
       throw safe;
@@ -84,8 +87,9 @@ export class RetainedFilesystemRepository implements Repository {
   receipt(id: string): Promise<RepositoryRetentionReceipt | undefined> {
     return this.exclusive(async () => {
       const row = this.ledger!.row(operationHash(id)); if (!row) return undefined;
-      if (row.expiresAt <= time(this.options)) this.ledger!.expired(row.operationHash);
-      return { operationHash: row.operationHash, acceptedAt: row.acceptedAt, expiresAt: row.expiresAt, status: this.ledger!.row(row.operationHash)!.status, publication: row.publication, dataDeleted: row.dataDeleted };
+      if (this.ledger!.expiredAt(row, time(this.options))) this.ledger!.expired(row.operationHash);
+      return { operationHash: row.operationHash, acceptedAt: row.acceptedAt, expiresAt: row.expiresAt, status: this.ledger!.row(row.operationHash)!.status, publication: row.publication, dataDeleted: row.dataDeleted,
+        ...(row.expiryClock ? { expiryClock: row.expiryClock, acceptedAgeMs: row.acceptedAgeMs!, expiresAgeMs: row.expiresAgeMs! } : {}) };
     });
   }
   async sweep(options: { limit: number }): Promise<{ deleted: number }> {

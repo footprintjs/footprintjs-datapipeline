@@ -1,7 +1,7 @@
 # Opt-in trace budget and thirty-day retention
 
 This is a local-host `TraceStore`, not a collector service or a distributed
-storage coordinator. Existing stores, Python, Neo's original flow and mapping
+storage coordinator. Existing stores, collectors, application flows and mappings
 are unchanged. Nothing starts a timer or performs cleanup unless the host
 explicitly calls it. It uses existing gzip trace files and Node's built-in
 SQLite for small receipts/accounting; no new dependency or trace graph format.
@@ -25,8 +25,8 @@ if (store) await store.sweep({ limit: 100 });
 // On shutdown, after in-flight work finishes: store?.close().
 ```
 
-No example quota is a recommended production budget. `/data` also contains
-InfluxDB: its growth needs its own headroom. By default, the directory must be
+No example quota is a recommended production budget. If the filesystem also
+hosts databases or other applications, their growth needs its own headroom. By default, the directory must be
 on a different filesystem/device from `/`; root paths, symlink paths and
 non-private directories are refused before trace writes. Use the canonical
 absolute path. `requireSeparateFilesystem: false` is an explicit host exception
@@ -76,10 +76,9 @@ receipt. Interrupted cleanup stays charged and can be safely called again. It
 never follows trace symlinks or deletes a different namespace.
 
 This store expires **full trace files only**. It does not expire repository
-observations or operate Rahul's optional Python raw-response archives. His
-30-day raw-retention request remains an application/archive integration step;
-the existing Python archive's 24-hour cap is unchanged. Do not deploy believing
-this PR implements the entire evidence retention service.
+observations or operate raw-response archives. Each application owns those
+separate retention policies and maintenance paths. Existing archive limits stay
+unchanged; this store does not implement the entire evidence retention service.
 
 ## Validation and rollout gates
 
@@ -89,10 +88,8 @@ failed write/deletion recovery, symlinks, namespace/policy checks, independent
 health failure and preserved collection acknowledgements. Mutating quota,
 free-space admission or thirty-day expiry makes its regression test fail.
 
-The [PowerScale sizing experiment](POWERSCALE_STORAGE_MEASUREMENT.md) uses reported
-settings but synthetic responses. It reveals a top-N compatibility blocker and
-capacity far above current free space. Deployment still requires top-N support,
-confirmed page-limit semantics, representative saved responses, sustainable
-write-rate measurements, sufficient capacity, host supervision and archive/data
-retention integration. No device access, service rollout or mapping activation
-is authorized by this PR.
+Deployment requires representative inputs, measured allocated trace bytes,
+sustainable write/read rates, sufficient total-volume capacity, host supervision
+and separate archive/data retention integration. Include failure and pressure
+paths in that measurement. Passing the library fixtures does not establish an
+application capacity limit or authorize service rollout.

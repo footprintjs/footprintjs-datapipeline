@@ -1,9 +1,9 @@
 # Host receipt storage plan
 
-This is the integration plan for the first PowerScale shadow writer, using the
-existing datapipeline contracts. It is not persistence implemented by the Influx
-sink, a new generic record format, or a production cutover. Python continues to
-collect independently; Neo's original flow and mapping settings stay unchanged.
+This is a host integration plan using the existing datapipeline contracts. It
+is not persistence implemented by the Influx sink, a new generic record format,
+or a production cutover. Existing collectors, application flows and mapping
+settings remain independent of this library.
 
 ## Storage and order
 
@@ -33,8 +33,8 @@ Build capture, selection, point mapping, admission decisions, intent publication
 delivery and result publication as named Footprint steps. Policies use native
 decisions and each point/claim reads only its exact inputs. Keep pure point mapping
 in `derive()`. A coverage point names its response/selection inputs, rather than
-inventing a source row. Preserve the existing Python cleanup, selection, types
-and timestamp meaning, including known bugs until separately approved.
+inventing a source row. Preserve the existing collector cleanup, selection, types
+and timestamp meaning until a separate application change is approved.
 
 Persist local run events through a small versioned application `SourceAdapter`:
 the source is the host's immutable event snapshot, not the storage device.
@@ -86,12 +86,12 @@ recovery still need proof in the independent-service phase before production.
 
 ## Tests required in the application writer PR
 
-Saved-response parity must cover Python cleanup and field types; every admitted
+Saved-response parity must cover collector cleanup and field types; every admitted
 point resolves to exact source support: original rows for client points, and
 response/selection evidence for coverage points. Inject capture/intent persistence failure and
 prove zero dispatches. Inject post-dispatch result/trace persistence failures and
 prove partial truth survives. Restart with a saved intent but no result and prove
 delivery stays unknown, without dispatch. Test rejected-point coverage, manifest
 rebasing and limits, duplicate identities, exact-payload replay, and unchanged
-Python/original-flow/mapping behavior. These application tests are not supplied
+collector, application-flow and mapping behavior. These application tests are not supplied
 by this library follow-up.

@@ -178,12 +178,11 @@ interpreter fails the tests. Without explicit loopback test configuration, eight
 database tests are reported as skipped; CI requires them and fails without it.
 No database is required to use the encoder; the sink connects only when called.
 
-This library PR is the prerequisite for the first application writer. After a
-reviewed release, the Neo adapter can pin that published version and prove the
-complete saved client-response contract plus source-row links. PowerScale names,
-top-N, sentinels, node pools, legacy zero-ID behavior and poll timestamp selection
-remain there. No vendor collector, production write, service schedule, mapping
-enablement or switch-over is part of this library change.
+Application adapters must pin a reviewed published version and verify their
+saved-response contract and exact source-row links. Vendor identifiers, selection
+limits, sentinel values, topology and timestamp semantics belong in those
+adapters. This library change does not activate a vendor collector, production
+write, service schedule, mapping or application cutover.
 
 References: [InfluxDB 2 line protocol](https://docs.influxdata.com/influxdb/v2/reference/syntax/line-protocol/)
 and [write API](https://docs.influxdata.com/influxdb/v2/api/#tag/Write).

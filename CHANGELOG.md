@@ -1,72 +1,60 @@
 # Changelog
 
-## Unreleased
+## [0.10.0] - Unreleased
 
-- Optional daily-period history retirement for fresh verified-uptime namespaces.
-  Required finite host policy, period-bound core IDs, durable retired-prefix
-  fencing, cumulative checkpoints, bounded row reclamation and reusable metadata
-  capacity. The laptop example keeps seven days. Stable managed staging bounds
-  interrupted retries. Existing stores/IDs and defaults are unchanged; no timer,
-  migration, deployment or source-authenticity claim is added. Whole-period
-  verification now resumes through bounded transactions, including unconfirmed
-  saves whose files are confirmed gone; uncertainty is counted separately.
-  Transactional membership counters avoid admission scans. New work can bind a
-  new period without reopening storage or changing previous retry IDs. The
-  revised private ledger uses format 6 and refuses earlier unpublished formats.
-  Hosts may prepare the immediately next verified-age scope while admission
-  still refuses early dispatch and late first writes. Committed maintenance
-  reports unblocked pending work once per open-handle episode through
-  `REPOSITORY_HISTORY_PENDING`; host scheduling and backlog monitoring remain
-  required. The capacity test retains its byte assertions with a longer timeout.
-- Correct verified-age attribution across staggered handles. Each new accepted
-  intent advances a durable revision; other handles discard ambiguous earlier
-  elapsed time. Reads and maintenance preserve a publisher's continuous clock.
-  Transaction rollback and failed COMMIT never grant new clock authority.
-  Acceptance rounds up to avoid fractional-millisecond early expiry. Alternating
-  publishers may extend retention; no minimum age-progress rate is promised.
-- New verified namespaces use format 5 with durable initializing/active authority
-  and a bound ledger identity. Missing active metadata fails closed on reopen;
-  interrupted initial setup can recover. Older unpublished verified formats are
-  refused, not migrated. Existing wall-clock namespaces are unchanged.
+### Added
 
-- Optional immutable operation, reference and SQLite control-file limits for
-  new verified-uptime retained namespaces. Exhaustion refuses new identities
-  and emits fixed health output; exact expired history is kept. Capacity is a
-  snapshot, not a reservation or a payload/disk quota. No period retirement,
-  default limit, migration or automatic activation is added.
-  This is an emergency admission guard only: metadata growth is not reduced,
-  without the separate opt-in finite-history profile. Host integration and
-  sustained maintenance capacity remain readiness gates.
-  Native ledger `SQLITE_FULL` failures report the limit, including first-open
-  fence/schema/policy/clock writes, startup commit and budget activation,
-  publication acknowledgement, expiry/deletion markers, elapsed checkpoints and
-  final commit; unrelated publication failures keep their unconfirmed meaning.
-  Transient control-file checks run under the writer lock.
+- Opt-in verified-uptime expiry for fresh retained namespaces. Recorded elapsed
+  age excludes wall-clock corrections and unknown restart downtime.
+- Immutable metadata limits for operation counts, reference counts and SQLite
+  control files, plus `metadataCapacity()` snapshots. Caps alone preserve exact
+  history by refusing new identities when full; payload cleanup alone does not
+  recover that capacity.
+- Optional daily-period history retirement with `bindPeriod()`, `historyStatus()`
+  and `retireHistory()`. Bounded, resumable verification and reclamation preserve
+  a permanent retired-prefix fence. Unconfirmed publication stays unconfirmed
+  and is counted separately. The seven-day laptop profile is an example policy.
+- Stable managed staging for interrupted retries, transactional membership
+  counters, next-period scope preparation and committed pending-work health
+  observations. Hosts remain responsible for maintenance and backlog monitoring.
 
-- Retry a busy final SQLite COMMIT asynchronously, including verified-uptime
-  expiry and deletion acknowledgements. Checkpoints and publication are not
-  replayed; exhausted locks keep their fixed busy diagnostic.
+### Fixed
 
-- Optional verified-uptime expiry for new retained namespaces. A persisted
-  elapsed-age checkpoint prevents wall-clock corrections and unobserved restart
-  downtime from expiring data early. Legacy readers are fenced; existing data
-  and wall-clock namespaces are not converted.
+- Retained operations wait asynchronously for bounded transaction admission and
+  retry a busy final COMMIT. Publication, cleanup and uncertain external writes
+  are never replayed automatically.
+- Slow payload deletion runs outside the database writer transaction. Expiry is
+  durable first; deletion is confirmed only after unlink and synchronization.
+- A durable acceptance revision prevents an idle older handle from charging
+  pre-acceptance time to a newer record. Acceptance rounds up, expiry rounds down,
+  and failed transactions never gain new clock authority.
+- Durable initializing/active authority and matching ledger identities distinguish
+  recoverable interrupted setup from missing active metadata. Lost active
+  authority is refused rather than recreated as empty history.
+- Configured metadata limits classify native SQLite FULL consistently during
+  setup, activation and normal ledger writes. BUSY and publication uncertainty
+  retain their distinct meanings.
+- Transaction guards and guarded rollback recovery support Node 22.13, including
+  clock failures and SQLite's implicit rollback on FULL.
 
-- Remove application-specific sizing assets and references from the source tree
-  and package. Distribution now names each reviewed guide explicitly instead of
-  including a measurements directory. Storage guidance uses self-contained
-  library tests and requires workload-specific capacity measurements.
+### Compatibility and rollout
 
-- Slow retained-payload unlink/sync no longer holds the database transaction.
-  Expiry is durable first; deletion proof commits only after filesystem work.
-  Poll saves can finish while cleanup is stalled. Per-handle cleanup and close
-  are bounded, and a lost post-unlink acknowledgement remains recoverable.
+- Existing entry points, ordinary IDs, wall-clock namespaces and defaults remain
+  unchanged. Footprint 10.2.1, Foottrace 1.6.0 and Node >=22.13 remain required.
+- Fresh verified-age namespaces use format 5; finite-history namespaces use
+  format 6. Earlier unpublished verified formats are refused without migration.
+  Upgrade all managed readers, publishers and cleanup workers before enabling
+  a new profile. Exhaustive health-code handlers must cover the added codes.
+- Alternating publishers can repeatedly discard ambiguous elapsed intervals,
+  delaying expiry and retirement indefinitely. There is no minimum age-progress
+  rate or wall-time capacity guarantee. Historical large-volume measurements
+  predate this repair and were not rerun; host-specific capacity validation is
+  still required.
 
-- Retained repositories now wait asynchronously for bounded SQLite transaction
-  admission, including first-open setup, so overlapping cleanup and publication
-  do not fail immediately on a short lock. Exhausted admission and a full local
-  queue emit a fixed busy health event. Publication and uncertain writes are
-  never automatically retried.
+### Packaging
+
+- Supporting documents use an explicit file list. Application-specific sizing
+  assets and references are excluded from the source and published package.
 
 ## [0.9.0] - 2026-10-21
 

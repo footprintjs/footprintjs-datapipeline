@@ -36,8 +36,11 @@ allocation rounding; the remaining budget reserves three copies of each allowed
 4 KiB database page plus rollback frame overhead. SQLite's native page ceiling
 enforces the main-file bound even for one large intent. The new namespace uses
 DELETE journaling with cache spilling disabled; both settings are checked on
-admission, so a reader cannot pin an ever-growing WAL. A native `SQLITE_FULL`
-raised by the ledger's new-intent write is `REPOSITORY_METADATA_LIMIT`, including
+admission, so a reader cannot pin an ever-growing WAL. Transient control files
+are checked after acquiring the writer lock, so another handle cannot remove its
+journal during that check. A native `SQLITE_FULL` raised by a ledger write is
+`REPOSITORY_METADATA_LIMIT`, including the new intent, publication acknowledgement,
+expiry/deletion markers, elapsed checkpoint or final commit. This also applies
 when SQLite has already rolled the transaction back. A publication-side failure
 remains `REPOSITORY_UNCONFIRMED`, even if its error happens to carry the same
 number. Neither outcome is permission to retry a publication or an uncertain send.

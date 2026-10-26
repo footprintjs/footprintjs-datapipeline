@@ -88,14 +88,14 @@ An observation has a subject, a versioned schema, an explicit time basis, and ei
 
 Keep service-specific clients and adapters in separate packages. The core has no infrastructure vendor SDK or assumed metric schema. Implement the `Repository` and optional `TraceStore` ports to integrate other storage systems.
 
-For example, a separate NeoPowerScale integration can expose this boundary around its existing collector:
+For example, an application adapter can expose this boundary around its existing collector:
 
 ```ts
 import type {
   CandidateBatch, JsonValue, OperationContext, Source,
 } from 'footprintjs-datapipeline';
 
-interface NeoPowerScaleCollector {
+interface ApplicationCollector {
   collect(
     source: Source,
     request: JsonValue,
@@ -104,7 +104,7 @@ interface NeoPowerScaleCollector {
 }
 ```
 
-That collector can supply the `collect` method of a versioned `SourceAdapter`. The integration owns authentication, vendor API calls, mapping to observation schemas, and honest coverage declarations. This interface documents the boundary; this package supplies no NeoPowerScale client or working vendor adapter.
+That collector can supply the `collect` method of a versioned `SourceAdapter`. The integration owns authentication, vendor API calls, mapping to observation schemas, and honest coverage declarations. This interface documents the boundary; this package supplies no vendor client or working vendor adapter.
 
 ## What the records mean
 
@@ -131,7 +131,7 @@ For new operations, `createFilesystemRepository({ directory, packing: 'gzip' })`
 optionally stores each atomic batch, observations and evidence in one bounded
 gzip bundle. Packing defaults off; upgraded readers read both formats, and
 existing references/records are never rewritten. Upgrade every reader before
-enabling it. See [packed repository bounds, durability and measurements](docs/PACKED_REPOSITORY.md).
+enabling it. See [packed repository bounds, durability and validation](docs/PACKED_REPOSITORY.md).
 
 The filesystem trace store also offers `read(traceRef)` for inspecting a stored trace. Full traces may contain plugin inputs and outputs, so choose their storage location and retention policy accordingly.
 
@@ -436,8 +436,8 @@ unchanged. See [run/window timing measurements](docs/RUN_WINDOW_TIMING.md).
 The [guarded gzip trace store](docs/TRACE_STORAGE_BUDGET.md) adds explicit disk
 budgets, fixed-code gaps, reserved headroom and bounded thirty-day trace expiry.
 It is absent unless explicitly enabled, starts no timer, and changes no existing
-store. [Synthetic PowerScale sizing](docs/POWERSCALE_STORAGE_MEASUREMENT.md)
-records the reported settings, compatibility blockers and deployment limits.
+store. The guide separates trace-file budgets from repository metadata, raw
+archives and other filesystem users; size those costs for the intended workload.
 
 ## Optional repository expiry
 

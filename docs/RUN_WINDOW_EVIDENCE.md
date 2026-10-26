@@ -2,8 +2,8 @@
 
 This first slice adds one generic, explicit transform. It starts no collection,
 clock, service, database query, deletion, retry or archive. Existing pipelines
-are unchanged. PowerScale units, selection and acquisition stay in the adapter;
-this library contains no PowerScale, vCenter or Neo dependency.
+are unchanged. Vendor units, selection and acquisition stay in the adapter;
+this library contains no vendor collector or application dependency.
 
 ## What the host saves per poll
 
@@ -125,10 +125,9 @@ select representative/exception runs, compress automatically, set retention
 periods, delete anything, implement disk quotas or change today's per-poll
 writer traces. Those remain separate reviewed changes and operator decisions.
 
-No Python collector, Neo original flow, mapping flag, device connection,
-production service, dependency version or paid model call changes here. This
-library PR must be released and explicitly adopted by the PowerScale adapter
-before Neo can use it. Default cause-reader traversal limits may require a
+No existing collector, application flow, mapping flag, device connection or
+production service changes here. Applications must explicitly adopt a reviewed
+release. Default cause-reader traversal limits may require a
 narrower window or explicit host limits; a saved window fitting the record cap
 is not a promise of a complete explanation at every query limit.
 
@@ -149,7 +148,7 @@ and the bounded bulk-read optimization.
 
 ## Full-trace retention decision
 
-The approved host policy keeps every recorded run trace and every window trace
+The offline example keeps every recorded run trace and every window trace
 with lossless gzip, without sampling or automatic deletion. The library default
 remains unchanged. See [the storage plan](FULL_TRACE_STORAGE_PLAN.md) for
 configuration, reader rollout, capacity assumptions and raw-archive boundaries.

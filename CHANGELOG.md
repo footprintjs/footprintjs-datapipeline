@@ -23,6 +23,11 @@
   downtime from expiring data early. Legacy readers are fenced; existing data
   and wall-clock namespaces are not converted.
 
+- Remove application-specific sizing assets and references from the source tree
+  and package. Distribution now names each reviewed guide explicitly instead of
+  including a measurements directory. Storage guidance uses self-contained
+  library tests and requires workload-specific capacity measurements.
+
 - Slow retained-payload unlink/sync no longer holds the database transaction.
   Expiry is durable first; deletion proof commits only after filesystem work.
   Poll saves can finish while cleanup is stalled. Per-handle cleanup and close
@@ -91,7 +96,7 @@
 
 ### Compatibility
 
-- The new output is opt-in. Existing collect/derive flows, schedules, storage contracts and pinned dependencies are unchanged. No vendor collector, Neo integration, background service, automatic retry or exactly-once delivery is added.
+- The new output is opt-in. Existing collect/derive flows, schedules, storage contracts and pinned dependencies are unchanged. No vendor collector, application integration, background service, automatic retry or exactly-once delivery is added.
 
 ## [0.4.1] - 2026-10-18
 

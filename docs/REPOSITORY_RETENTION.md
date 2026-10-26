@@ -132,8 +132,11 @@ commits after the ledger. Interrupted first setup can resume; once active, a
 missing ledger or missing critical authority table/row is refused on reopen,
 never replaced with empty ownership or age zero. Prior unpublished verified-age
 formats and legacy namespaces are refused rather than migrated automatically.
-Old constructors reject the new fence. Losing either side is unavailable
-storage, not permission to initialize over old IDs. This protects incomplete
+Old constructors reject the new fence, but refusal is not necessarily read-only:
+a 0.9 constructor can create empty legacy tables and change fence journaling
+before its version check. Upgrade and stop all older managed readers, publishers
+and cleanup workers before enabling a new namespace; do not mix versions there.
+Losing either side is unavailable storage, not permission to initialize over old IDs. This protects incomplete
 stores; it does not authenticate arbitrary external replacements or stale backups.
 The profile uses SQLite DELETE journals and EXTRA synchronization; the old WAL
 profile is unchanged. This is no new attempt journal, history-retirement policy

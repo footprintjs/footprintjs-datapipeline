@@ -12,7 +12,7 @@ npm run check
 npm run example
 ```
 
-[examples/basic.ts](examples/basic.ts) defines a local adapter that collects two numeric readings and a transform that calculates their mean. It collects, retries the same request, derives the mean, then reads both batches, their observations, and their structured evidence. Data and full execution traces use separate filesystem stores in a temporary directory that the example removes when it finishes. It needs no external service or credentials.
+[examples/basic.ts](https://github.com/footprintjs/footprintjs-datapipeline/blob/6b2e09773a852eb4c9eb10fa3e7452c7fae73c6e/examples/basic.ts) defines a local adapter that collects two numeric readings and a transform that calculates their mean. It collects, retries the same request, derives the mean, then reads both batches, their observations, and their structured evidence. Data and full execution traces use separate filesystem stores in a temporary directory that the example removes when it finishes. It needs no external service or credentials.
 
 The derived payload is `{ "mean": 12, "count": 2, "unit": "example-unit" }`. Both operations report a committed batch and a stored trace.
 

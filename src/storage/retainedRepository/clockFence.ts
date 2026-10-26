@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { RepositoryRetentionError } from './contracts.js';
+import { inTransaction } from './transactionState.js';
 
 interface AuthorityOptions {
   readonly version?: number;
@@ -11,21 +12,6 @@ interface AuthorityOptions {
   readonly requiredTables?: readonly string[];
 }
 const unconfirmed = (): never => { throw new RepositoryRetentionError('REPOSITORY_UNCONFIRMED'); };
-function inTransaction(db: DatabaseSync): boolean {
-  // isTransaction was added after the supported Node 22.13 minimum. A nested
-  // BEGIN is rejected without changing the existing transaction; if it starts
-  // instead, roll back only that empty probe transaction before returning.
-  if (typeof db.isTransaction === 'boolean') return db.isTransaction;
-  try { db.exec('BEGIN DEFERRED'); }
-  catch (error) {
-    if (error instanceof Error && Object.getOwnPropertyDescriptor(error, 'code')?.value === 'ERR_SQLITE_ERROR' &&
-      Object.getOwnPropertyDescriptor(error, 'errcode')?.value === 1 &&
-      error.message === 'cannot start a transaction within a transaction') return true;
-    throw error;
-  }
-  db.exec('ROLLBACK');
-  return false;
-}
 function file(path: string): Stats | undefined {
   try {
     const info = lstatSync(path);

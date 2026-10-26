@@ -5,6 +5,8 @@ import { DatabaseSync } from 'node:sqlite';
 import { expect, it, vi } from 'vitest';
 import { clockFence } from '../src/storage/retainedRepository/clockFence.js';
 import { createRetainedFilesystemRepository } from '../src/storage/retainedRepository/index.js';
+import { RepositoryLedger } from '../src/storage/retainedRepository/ledger.js';
+import { FilesystemRepository } from '../src/storage/filesystem.js';
 import { candidate } from './helpers/filesystem-candidate.js';
 
 // Exercise the Node 22.13 API surface even when the test runner is newer.
@@ -47,6 +49,68 @@ it('supports guarded startup, publication, restart and cleanup on the running mi
     await unlink(join(f.directory, 'retention-v2.sqlite'));
     await expect(f.open().commit(write)).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
     await expect(access(join(f.directory, 'retention-v2.sqlite'))).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(f.alerts).toEqual([{ code: 'REPOSITORY_UNCONFIRMED' }]);
+  } finally { await f.close(); }
+});
+
+it('rolls back a failed clock check so the same handle recovers after the clock is restored', async () => {
+  const f = await fixture(), repo = f.open(), write = candidate();
+  try {
+    await repo.commit(write);
+    f.elapsed(NaN);
+    await expect(repo.receipt(write.operationId)).rejects.toMatchObject({ code: 'REPOSITORY_CLOCK_UNAVAILABLE' });
+    f.elapsed(0);
+    expect(await repo.receipt(write.operationId)).toMatchObject({ status: 'stored', publication: 'committed' });
+    expect(await repo.read(write.batch.ref)).toEqual(write.batch);
+    expect(f.alerts).toEqual([{ code: 'REPOSITORY_CLOCK_UNAVAILABLE' }]);
+  } finally { await f.close(); }
+});
+
+it('rolls back a failed intent without publishing or keeping its operation identity', async () => {
+  const f = await fixture(), repo = f.open(), write = candidate();
+  const publish = vi.spyOn(FilesystemRepository.prototype, 'commit');
+  const original = RepositoryLedger.prototype.intent;
+  vi.spyOn(RepositoryLedger.prototype, 'intent').mockImplementationOnce(function (this: RepositoryLedger, ...args) {
+    original.apply(this, args);
+    throw Error('interrupted after intent');
+  });
+  try {
+    await expect(repo.commit(write)).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
+    expect(publish).not.toHaveBeenCalled();
+    expect(await repo.receipt(write.operationId)).toBeUndefined();
+    expect(await repo.findOperation(write.operationId)).toBeUndefined();
+    expect((await repo.commit(write)).status).toBe('committed');
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(f.alerts).toEqual([{ code: 'REPOSITORY_UNCONFIRMED' }]);
+  } finally { await f.close(); }
+});
+
+it('preserves native SQLITE_FULL refusal after its automatic rollback and allows a fresh attempt', async () => {
+  const f = await fixture(), repo = f.open(), write = candidate();
+  const publish = vi.spyOn(FilesystemRepository.prototype, 'commit');
+  const original = RepositoryLedger.prototype.intent;
+  let nativeCode: unknown;
+  vi.spyOn(RepositoryLedger.prototype, 'intent').mockImplementationOnce(function (this: RepositoryLedger, ...args) {
+    original.apply(this, args);
+    const db = (this as unknown as { db: DatabaseSync }).db;
+    const maximum = db.prepare('PRAGMA max_page_count').get()!.max_page_count;
+    try {
+      db.exec('CREATE TABLE minimum_runtime_full_probe(value BLOB)');
+      const pages = db.prepare('PRAGMA page_count').get()!.page_count;
+      db.exec(`PRAGMA max_page_count=${pages}`);
+      db.exec('INSERT INTO minimum_runtime_full_probe VALUES(zeroblob(1000000))');
+    } catch (error) {
+      nativeCode = Object.getOwnPropertyDescriptor(error, 'errcode')?.value;
+      throw error;
+    } finally { db.exec(`PRAGMA max_page_count=${maximum}`); }
+  });
+  try {
+    await expect(repo.commit(write)).rejects.toMatchObject({ code: 'REPOSITORY_UNCONFIRMED' });
+    expect(nativeCode).toBe(13);
+    expect(publish).not.toHaveBeenCalled();
+    expect(await repo.receipt(write.operationId)).toBeUndefined();
+    expect((await repo.commit(write)).status).toBe('committed');
+    expect(publish).toHaveBeenCalledTimes(1);
     expect(f.alerts).toEqual([{ code: 'REPOSITORY_UNCONFIRMED' }]);
   } finally { await f.close(); }
 });

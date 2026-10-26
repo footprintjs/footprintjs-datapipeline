@@ -1,8 +1,7 @@
 # Full traces with lossless compression
 
-Owner decision, 2026-10-20: retain the complete trace for every recorded run and
-window assessment, using the existing lossless gzip trace store. This supersedes
-the earlier proposal to retain representative runs or only exceptional traces.
+The offline run/window example retains the complete trace for every recorded
+run and window assessment using the existing lossless gzip trace store.
 Window summaries are additional indexed evidence; they do not replace run traces.
 
 ## Storage contract
@@ -12,7 +11,7 @@ Window summaries are additional indexed evidence; they do not replace run traces
 | Run receipts and exact statistical contributions | Keep every recorded run through existing repository APIs. A missing collection remains a gap. |
 | Full recorded collection/processing traces | Keep every trace; gzip changes encoding only. No sampling, truncation, age-based expiry or automatic deletion. |
 | Full window traces | Keep every requested assessment, including its cutoff, decisions and input references. Late data creates a new assessment. |
-| Raw device responses | Separate archive permission and policy; this decision does not expand raw capture or remove its existing 24-hour ceiling. A trace cannot recover raw bytes that were never saved. |
+| Raw device responses | Separate application permission and retention policy. The example does not expand raw capture or alter archive limits. A trace cannot recover raw bytes that were never saved. |
 
 “Every run” means every execution that actually produced a record, including
 recorded failed/partial outcomes; it cannot manufacture a record for a process
@@ -27,7 +26,7 @@ attempt survives a crash.
 
 Configure the existing `createFilesystemTraceStore({ directory, compression:
 'gzip' })` for the native window transform and the pipeline's existing trace
-store hook. PowerScale writers must retain their own native per-run traces too;
+store hook. Application writers must retain their own native per-run traces too;
 this library example does not enable or replace those writers.
 
 Upgrade **every reader before enabling new compressed writes**. Datapipeline
@@ -43,33 +42,24 @@ The offline `examples/run-window.ts` configures gzip for every produced trace:
 59 collection traces reopen with a fresh reader; the native record is reopened
 and used by the existing cause proof. The missing scheduled poll remains absent,
 not a fabricated sixtieth run. These traces describe the synthetic adapter's
-work; they do not claim to record Python's original device acquisition.
+work; they do not claim to record a separate collector's device acquisition.
 
 ## Capacity planning, not an approved quota
 
-The reported workload is 14 clusters, client polls every 5 seconds and full
-performance every 5 minutes. This gives 241,920 scheduled client polls and 4,032
-five-minute fleet windows per day. The operator reports that repository and
-deployed scripts match; this has not been independently inspected. Top-N,
-sentinel-ID and page-limit settings are still needed for representative sizing.
+Estimate storage from the application's measured allocated bytes per operation,
+operation rate and chosen retention policy. Include successful, partial and failed
+runs, window traces, receipt/index growth, raw archives, journal reserves and backups.
+Measure logical bytes and filesystem allocation separately. Compression ratios and
+fixed namespace overhead from small fixtures are not production capacity forecasts.
 
-A previously measured **0.63 MB compressed client trace** multiplied by that
-poll count is **152.41 GB/day of traces alone** (decimal units), approximately
-4.57 TB per 30 days. This is an illustration for that synthetic profile, not a
-production forecast. Real trace size depends on retained clients and settings.
-Receipts, inputs, window traces, raw archives, filesystem allocation, indexes
-and backups add storage. Compression ratios must be measured, never assumed.
+Before deployment, measure write/read time and peak memory at representative row
+counts and concurrency. Monitor used/free bytes and persistence failures. A quota
+or operator intervention must not silently turn into sampling or deletion. The
+plain gzip store implements no automatic cleanup service or retention policy;
+optional guarded storage has its own explicit policy and rollout requirements.
 
-Before deployment, measure compressed bytes/run and bytes/day across real row
-counts and failure cases, plus write/read time and peak memory. Monitor used and
-free bytes and alert on persistence failures. Capacity increases or operator
-intervention must not silently turn into sampling or deletion. No automatic
-cleanup service or quota policy is implemented by this PR.
+## Application boundary
 
-## Scope of this PR
-
-Default-off run/window foundation, documented storage policy and offline proof
-only. No production service starts; no deployed setting, Python collection,
-Neo original flow, mapping flag, raw-archive policy or paid model use changes.
-The PR remains open for independent review. Library release, application
-adoption and deployment remain separate steps.
+The offline example and this storage guidance start no production service and
+change no deployed collector, mapping or raw-archive policy. Library release,
+application adoption and deployment remain separate steps.

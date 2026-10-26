@@ -85,13 +85,18 @@ export class RepositoryLedger {
       throw error;
     }
   }
+  /** Translate only this ledger's own writes; external publication errors stay unconfirmed. */
+  private write<T>(operation: () => T): T {
+    try { return operation(); }
+    catch (error) { if (this.budget) metadataWriteFailure(error); throw error; }
+  }
   async commit(): Promise<void> {
-    this.age?.checkpoint();
+    this.write(() => this.age?.checkpoint());
     // DELETE-journal readers can block COMMIT after BEGIN IMMEDIATE succeeded.
     // SQLITE_BUSY leaves this transaction open. Retry only COMMIT, once the
     // checkpoint and all native publication/cleanup effects have already run.
     await admitTransaction(() => {
-      try { this.db.exec('COMMIT'); }
+      try { this.write(() => this.db.exec('COMMIT')); }
       catch (error) {
         if (isBusy(error)) throw new RepositoryRetentionError('REPOSITORY_BUSY');
         throw error;
@@ -120,8 +125,7 @@ export class RepositoryLedger {
   }
   intent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number, period?: number): void {
     this.budget?.admit(refs.length);
-    try { this.insertIntent(hash, fingerprint, writeHash, refs, now, retentionMs, period); }
-    catch (error) { if (this.budget) metadataWriteFailure(error); throw error; }
+    this.write(() => this.insertIntent(hash, fingerprint, writeHash, refs, now, retentionMs, period));
   }
   private insertIntent(hash: string, fingerprint: string, writeHash: string, refs: readonly string[], now: number, retentionMs: number, period?: number): void {
     if (this.age) {
@@ -135,9 +139,9 @@ export class RepositoryLedger {
     const insert = this.db.prepare('INSERT INTO refs VALUES(?,?)');
     for (const ref of refs) insert.run(ref, hash);
   }
-  stored(hash: string): void { this.db.prepare("UPDATE operations SET status='stored',confirmed=1 WHERE operationHash=?").run(hash); }
-  expired(hash: string): void { this.db.prepare("UPDATE operations SET status='expired' WHERE operationHash=?").run(hash); }
-  deleted(hash: string): void { this.db.prepare('UPDATE operations SET dataDeleted=1 WHERE operationHash=?').run(hash); }
+  stored(hash: string): void { this.write(() => this.db.prepare("UPDATE operations SET status='stored',confirmed=1 WHERE operationHash=?").run(hash)); }
+  expired(hash: string): void { this.write(() => this.db.prepare("UPDATE operations SET status='expired' WHERE operationHash=?").run(hash)); }
+  deleted(hash: string): void { this.write(() => this.db.prepare('UPDATE operations SET dataDeleted=1 WHERE operationHash=?').run(hash)); }
   expiredAt(row: Row, wall: number): boolean { return row.status === 'expired' || (this.age ? row.expiresAgeMs! <= this.age.now() : row.expiresAt <= wall); }
   wallBased(): boolean { return !this.age; }
   checkOperation(id: string, intent: 'lookup' | 'admit' = 'lookup'): number | undefined { return this.history?.check(id, 'o', intent); }
@@ -153,8 +157,7 @@ export class RepositoryLedger {
   }
   retireHistory(limit: number) {
     if (!this.history) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');
-    try { return this.history.retire(limit); }
-    catch (error) { if (this.budget) metadataWriteFailure(error); throw error; }
+    return this.write(() => this.history!.retire(limit));
   }
   metadataCapacity(request: { operations: number; references: number }) {
     if (!this.budget) throw new RepositoryRetentionError('REPOSITORY_INVALID_OPTIONS');

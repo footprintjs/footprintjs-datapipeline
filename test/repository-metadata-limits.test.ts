@@ -35,6 +35,103 @@ function manyRecords(count: number): CommitWrite {
     evidence: { ...seed.evidence, outputRefs: [seed.batch.ref, ...observations.map(item => item.ref)] } };
 }
 
+function failSqliteWriteOnce(sql: string, armed: () => boolean = () => true) {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+  let injected = false;
+  const fail = () => { injected = true; throw Object.assign(new Error('private SQLite diagnostic'), { errcode: 13 }); };
+  const prepare = DatabaseSync.prototype.prepare;
+  vi.spyOn(DatabaseSync.prototype, 'prepare').mockImplementation(function (this: InstanceType<typeof DatabaseSync>, query: string) {
+    const statement = prepare.call(this, query);
+    if (query === sql && armed() && !injected) vi.spyOn(statement, 'run').mockImplementationOnce(fail);
+    return statement;
+  });
+  const exec = DatabaseSync.prototype.exec;
+  vi.spyOn(DatabaseSync.prototype, 'exec').mockImplementation(function (this: InstanceType<typeof DatabaseSync>, query: string) {
+    if (query === sql && armed() && !injected) return fail();
+    return exec.call(this, query);
+  });
+  return () => expect(injected).toBe(true);
+}
+
+it.each([
+  "UPDATE operations SET status='stored',confirmed=1 WHERE operationHash=?",
+  'UPDATE elapsed_clock SET ageMs=? WHERE id=1 AND ageMs<=?',
+  'COMMIT',
+])('reports metadata exhaustion after native publication at %s without replaying it', async sql => {
+  const f = await fixture(10);
+  try {
+    await f.repo.commit(candidate('seed'));
+    let published = false;
+    const native = FilesystemRepository.prototype.commit;
+    const publication = vi.spyOn(FilesystemRepository.prototype, 'commit').mockImplementation(async function (this: FilesystemRepository, write) {
+      const result = await native.call(this, write); published = true; return result;
+    });
+    const assertInjected = failSqliteWriteOnce(sql, () => published);
+    await expect(f.repo.commit(candidate('post-publication-full'))).rejects.toMatchObject({ code: 'REPOSITORY_METADATA_LIMIT' });
+    assertInjected();
+    expect(publication).toHaveBeenCalledTimes(1);
+    expect(f.alerts).toEqual([{ code: 'REPOSITORY_METADATA_LIMIT' }]);
+    expect(await f.repo.receipt('post-publication-full')).toMatchObject({ status: 'pending', publication: 'unconfirmed' });
+    expect(await f.repo.findOperation('post-publication-full')).toBeDefined();
+    expect(await f.repo.receipt('post-publication-full')).toMatchObject({ status: 'stored', publication: 'committed' });
+    expect(publication).toHaveBeenCalledTimes(1);
+  } finally { await f.close(); }
+});
+
+it.each([
+  ["UPDATE operations SET status='expired' WHERE operationHash=?", false],
+  ['UPDATE operations SET dataDeleted=1 WHERE operationHash=?', true],
+] as const)('reports metadata exhaustion during cleanup at %s without false deletion proof', async (sql, wasUnlinked) => {
+  const f = await fixture();
+  try {
+    await f.repo.commit(candidate('cleanup-full')); f.elapsed(100);
+    const assertInjected = failSqliteWriteOnce(sql);
+    await expect(f.repo.sweep({ limit: 10 })).rejects.toMatchObject({ code: 'REPOSITORY_METADATA_LIMIT' });
+    assertInjected();
+    expect(f.alerts).toEqual([{ code: 'REPOSITORY_METADATA_LIMIT' }]);
+    expect(readdirSync(join(f.directory, 'operations'))).toHaveLength(wasUnlinked ? 0 : 1);
+    expect(await f.repo.receipt('cleanup-full')).toMatchObject({ status: 'expired', publication: 'committed', dataDeleted: false });
+    expect(await f.repo.sweep({ limit: 10 })).toEqual({ deleted: 1 });
+    expect(await f.repo.receipt('cleanup-full')).toMatchObject({ status: 'expired', dataDeleted: true });
+  } finally { await f.close(); }
+});
+
+it('checks transient control files only while holding the writer transaction', async () => {
+  const f = await fixture();
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof import('node:sqlite');
+  let transaction = false, checkCount = 0;
+  try {
+    await f.repo.commit(candidate('seed'));
+    const exec = DatabaseSync.prototype.exec;
+    vi.spyOn(DatabaseSync.prototype, 'exec').mockImplementation(function (this: InstanceType<typeof DatabaseSync>, sql: string) {
+      const result = exec.call(this, sql); transaction = this.isTransaction; return result;
+    });
+    const check = MetadataBudget.prototype.checkFiles;
+    vi.spyOn(MetadataBudget.prototype, 'checkFiles').mockImplementation(function (this: MetadataBudget) {
+      checkCount++; expect(transaction).toBe(true); return check.call(this);
+    });
+    await f.repo.commit(candidate('checked'));
+    await f.repo.metadataCapacity();
+    expect(checkCount).toBeGreaterThan(0);
+  } finally { await f.close(); }
+});
+
+it.each(['throw', 'reject'])('a health callback that %ss cannot replace a metadata refusal', async failure => {
+  const f = await fixture(1);
+  const onHealth = vi.fn(() => {
+    if (failure === 'throw') throw new Error('private health failure');
+    return Promise.reject(new Error('private health failure'));
+  });
+  const repo = createRetainedFilesystemRepository({ ...f.options, onHealth })!;
+  try {
+    await repo.commit(candidate('accepted'));
+    await expect(repo.commit(candidate('refused'))).rejects.toMatchObject({ code: 'REPOSITORY_METADATA_LIMIT' });
+    expect(onHealth).toHaveBeenCalledExactlyOnceWith({ code: 'REPOSITORY_METADATA_LIMIT' });
+    expect(await repo.receipt('refused')).toBeUndefined();
+    expect(await repo.read(candidate('accepted').batch.ref)).toEqual(candidate('accepted').batch);
+  } finally { repo.close(); await f.close(); }
+});
+
 it('retries an actual busy final COMMIT with metadata limits while a second publisher waits', async () => {
   const f = await fixture(10);
   const other = createRetainedFilesystemRepository(f.options)!;

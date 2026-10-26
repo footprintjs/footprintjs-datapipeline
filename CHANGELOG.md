@@ -27,8 +27,10 @@
   This is an emergency admission guard only: metadata growth is not reduced,
   without the separate opt-in finite-history profile. Host integration and
   sustained maintenance capacity remain readiness gates.
-  A native ledger-intent `SQLITE_FULL` reports the limit; unrelated publication
-  failures keep their unconfirmed meaning.
+  Native ledger `SQLITE_FULL` failures report the limit, including publication
+  acknowledgement, expiry/deletion markers, elapsed checkpoints and final commit;
+  unrelated publication failures keep their unconfirmed meaning. Transient
+  control-file checks run under the writer lock.
 
 - Retry a busy final SQLite COMMIT asynchronously, including verified-uptime
   expiry and deletion acknowledgements. Checkpoints and publication are not
@@ -38,6 +40,11 @@
   elapsed-age checkpoint prevents wall-clock corrections and unobserved restart
   downtime from expiring data early. Legacy readers are fenced; existing data
   and wall-clock namespaces are not converted.
+
+- Remove application-specific sizing assets and references from the source tree
+  and package. Distribution now names each reviewed guide explicitly instead of
+  including a measurements directory. Storage guidance uses self-contained
+  library tests and requires workload-specific capacity measurements.
 
 - Slow retained-payload unlink/sync no longer holds the database transaction.
   Expiry is durable first; deletion proof commits only after filesystem work.
@@ -107,7 +114,7 @@
 
 ### Compatibility
 
-- The new output is opt-in. Existing collect/derive flows, schedules, storage contracts and pinned dependencies are unchanged. No vendor collector, Neo integration, background service, automatic retry or exactly-once delivery is added.
+- The new output is opt-in. Existing collect/derive flows, schedules, storage contracts and pinned dependencies are unchanged. No vendor collector, application integration, background service, automatic retry or exactly-once delivery is added.
 
 ## [0.4.1] - 2026-10-18
 

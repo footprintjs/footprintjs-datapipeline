@@ -64,44 +64,26 @@ collection throughput or solve historical indexing. Measure the intended host,
 namespace size and recovery cost before service deployment. Content checks are
 consistency checks, not source authentication or a tamper-evident archive.
 
-## Actual writer execution proof
+## Validation and capacity planning
 
-Run the inactive Neo client writer against saved synthetic input, with a fixed
-poll clock, filesystem stores and a simulated acknowledged sink:
+The self-contained tests use synthetic library records. Packed repository tests
+compare reopened records and references with the same logical input; publication
+fault tests cover damaged staged bytes, failed publication, uncertain sync and
+mixed-format races. Read tests exercise corrupt/oversized input, bounded concurrent
+inflation, caller-owned receipts and reopening without a completed-result cache.
+
+Run them from this checkout:
 
 ```sh
-node --import tsx docs/measurements/measure-packed-repository.mts \
-  /path/to/neo/packages/powerscale-datapipeline /new/output/directory
+npm test -- test/packed-repository.test.ts test/packed-publication.test.ts test/packed-reads.test.ts test/packed-reader-integration.test.ts
 ```
 
-The script runs the real writer once per profile, tees the same immutable commits
-to plain and packed repositories, reads the writer's inputs through the packed
-backend, checks intent is durable before HTTP, and reopens every record and
-operation in a fresh reader. It compares exact per-record canonical bytes/hashes,
-and four first/last-point cause outputs before/after trace reopening. Existing
-incomplete-cause gaps remain unchanged; no physical cause is established.
+These tests verify storage behavior, not a particular application's collection
+rate or disk requirement. Measure representative successful, partial and failed
+operations on the intended filesystem. Record logical and allocated bytes per
+operation, file counts, read/write latency and peak memory. Include native traces,
+metadata, journal space, raw archives and backups in the total storage budget.
+Small-fixture compression ratios and fixed startup costs are not daily forecasts.
 
-| Saved profile | Plain bytes / files | Packed bytes / files | Allocated file bytes: plain → packed |
-| --- | ---: | ---: | ---: |
-| 50 returned, 50 retained clients + coverage | 202,243 / 75 | 27,452 / 6 | 360,448 → 40,960 |
-| 256 returned, 154 retained clients + coverage | 618,011 / 179 | 71,388 / 6 | 966,656 → 86,016 |
-
-These are measured runs, not production captures or daily/retention forecasts.
-The implementation stores canonical UTF-8 strings instead of the earlier
-experiment's base64 files and duplicate file hashes, so its numbers differ.
-Acknowledgement times differ between two physical commits; all logical records,
-references and request fingerprints match, and each backend recovers its own
-exact saved receipt. Native traces are not repacked by this option.
-
-All **242 records and 12 operations** reopened. Restart made no new capture or
-send. A 50,000-byte content ceiling refused typed-point publication, retained the
-saved capture, and produced no extra sink call. See the
-[measurement JSON](measurements/packed-repository-2026-10-20.json).
-
-Fault tests also verify damaged staged bytes, failed publication, uncertain sync,
-mixed-format races, corrupt/oversized input, and bounded concurrent reads.
-Neutralization checks disable packing, record-hash verification, staged readback
-and the concurrency bound separately; the corresponding regression tests fail.
-
-Repository expiry, compact logical point schemas, access policy and Neo adoption
-are separate changes. This option changes none of them and starts no service.
+Repository expiry, compact logical point schemas, access policy and application
+adoption are separate changes. This option changes none of them and starts no service.

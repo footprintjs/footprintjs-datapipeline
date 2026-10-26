@@ -43,11 +43,11 @@
     "docs/RUN_WINDOW_TIMING.md",
     "docs/FULL_TRACE_STORAGE_PLAN.md",
     "docs/TRACE_STORAGE_BUDGET.md",
-    "docs/POWERSCALE_STORAGE_MEASUREMENT.md",
-    "docs/measurements",
     "docs/PACKED_REPOSITORY.md",
     "docs/REPOSITORY_RETENTION.md",
-    "docs/REPOSITORY_HISTORY.md"
+    "docs/REPOSITORY_HISTORY.md",
+    "docs/measurements/repository-history-review-2026-10-23.md",
+    "docs/measurements/repository-history-review-2026-10-23.json"
   ],
   "sideEffects": false,
   "scripts": {

@@ -2,7 +2,7 @@
 
 Measured locally on 2026-10-20, Node 24.21.0, macOS arm64, using the actual
 filesystem repository and native Footprint record. Synthetic public inputs;
-no device, database, model, Python collector or Neo process was contacted.
+no device, database, model or application collector was contacted.
 
 ## What was measured
 

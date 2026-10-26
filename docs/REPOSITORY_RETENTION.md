@@ -2,11 +2,13 @@
 
 ## Optional limits for exact retained metadata
 
-**Guard only; blocked on growth reduction.** The caps below retain the original
-per-record metadata and eventually stop admission permanently, even after payload
-cleanup. They do not make the repository a sustainable service. The required
-[sealed-period integration plan](design/2026-10-expired-metadata-rollups.md) keeps
-this feature in draft. No compaction or history retirement is implemented here.
+**Caps alone stop admission when exact metadata fills.** With only the limits
+below, expired payload cleanup retains per-record ownership and history, so it
+does not recover operation/reference capacity. The separate opt-in
+[finite-history profile](REPOSITORY_HISTORY.md) can retire eligible periods and
+reuse that capacity while preserving a permanent retired-prefix fence. Hosts
+must explicitly configure its policy, run maintenance and validate their workload;
+neither profile guarantees sustainable capacity or a wall-time deletion deadline.
 
 New `verified-uptime` namespaces may also supply `metadataLimits` with required
 `maxBytes`, `maxOperations` and `maxReferences`. There are no default limits.
@@ -17,15 +19,16 @@ entry exports `RETAINED_REPOSITORY_SAFETY_VERSION = 1` so hosts pinned to older
 releases can refuse a requested safety profile before opening storage.
 
 The operation/reference limits are checked before a new intent is saved. An
-intent owns its identity even when publication is unconfirmed. Expired/deleted
+intent owns its identity even when publication is unconfirmed. With limits alone, expired/deleted
 payloads do **not** free those identities: accepted IDs and exact expiry history
 are never forgotten or reused. At the limit, new work is refused with fixed
 `REPOSITORY_METADATA_LIMIT` health output. Count exhaustion does not disable
 existing reads, reconciliation or cleanup; native page/I/O exhaustion can still
 refuse them. The host needs an independent alert channel.
-Repeated refusals add no per-refusal row. This bounds growth by stopping admission;
-it does not provide perpetual availability or retire old periods. Choosing a
-history horizon still requires a separate identity/period-retirement design.
+Repeated refusals add no per-refusal row. Limits alone bound growth by stopping
+admission; they do not provide perpetual availability or retire old periods.
+For a finite horizon, use the separate [history-retirement policy](REPOSITORY_HISTORY.md)
+and its coordinated reader, publisher and cleanup requirements.
 
 `maxBytes` bounds the fixed SQLite control files, including allocated blocks and
 rollback journals. It is **not** a quota for payloads, traces, filesystem directory
@@ -129,8 +132,11 @@ commits after the ledger. Interrupted first setup can resume; once active, a
 missing ledger or missing critical authority table/row is refused on reopen,
 never replaced with empty ownership or age zero. Prior unpublished verified-age
 formats and legacy namespaces are refused rather than migrated automatically.
-Old constructors reject the new fence. Losing either side is unavailable
-storage, not permission to initialize over old IDs. This protects incomplete
+Old constructors reject the new fence, but refusal is not necessarily read-only:
+a 0.9 constructor can create empty legacy tables and change fence journaling
+before its version check. Upgrade and stop all older managed readers, publishers
+and cleanup workers before enabling a new namespace; do not mix versions there.
+Losing either side is unavailable storage, not permission to initialize over old IDs. This protects incomplete
 stores; it does not authenticate arbitrary external replacements or stale backups.
 The profile uses SQLite DELETE journals and EXTRA synchronization; the old WAL
 profile is unchanged. This is no new attempt journal, history-retirement policy

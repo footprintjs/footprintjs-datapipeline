@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.1] - 2026-10-28
+
+### Changed
+
+- `footprintjs` and `foottrace` are now version ranges (`^10.7.1` and `^1.8.0`)
+  instead of exact pins, so an app that installs its own copies shares them
+  instead of getting a nested second copy of each. The lowest versions accepted
+  are now Footprint 10.7.1 and Foottrace 1.8.0. No source change.
+
 ## [0.10.0] - 2026-10-26
 
 ### Added

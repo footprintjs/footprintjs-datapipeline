@@ -1,6 +1,6 @@
 {
   "name": "footprintjs-datapipeline",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Collection and derivation flows with traceable evidence, built on Footprint",
   "type": "module",
   "license": "MIT",
@@ -59,8 +59,8 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "footprintjs": "10.2.1",
-    "foottrace": "1.6.0"
+    "footprintjs": "^10.7.1",
+    "foottrace": "^1.8.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

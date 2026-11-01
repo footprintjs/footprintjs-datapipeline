@@ -2,7 +2,13 @@
 
 A small TypeScript library for collecting observations, deriving new observations, and reading the evidence behind them. Collection and derivation execute as FootPrint flows. Adapters own acquisition, transforms own computation, and a repository owns durable publication.
 
-Node.js 22.13 or later is required. Build and run this checkout with the commands below.
+For developers integrating finite source adapters, transforms and storage backends. [Published npm package and documentation](https://www.npmjs.com/package/footprintjs-datapipeline):
+
+```sh
+npm install footprintjs-datapipeline
+```
+
+Node.js 22.13 or later is required. The commands below build and run this source checkout; the source repository is private, so GitHub source links require access.
 
 ## Run the example
 

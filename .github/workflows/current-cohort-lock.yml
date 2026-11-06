@@ -1,0 +1,78 @@
+name: Current cohort lock generation
+on:
+  push:
+    branches: [codex/dp-fp11-cohort-20261105]
+permissions:
+  contents: read
+jobs:
+  registry-lock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+      - run: npm install --global npm@11.19.0
+      - name: Generate normal strict registry inputs without installing product code
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e .npmrc
+          configs="$(mktemp -d)"
+          touch "$configs/user" "$configs/global"
+          export NPM_CONFIG_USERCONFIG="$configs/user"
+          export NPM_CONFIG_GLOBALCONFIG="$configs/global"
+          export NPM_CONFIG_REGISTRY=https://registry.npmjs.org/
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const manifest=JSON.parse(fs.readFileSync('package.json','utf8'));
+          fs.writeFileSync('/tmp/dp-cohort-original-manifest.json',JSON.stringify(manifest));
+          manifest.dependencies.footprintjs='^11.0.0';
+          manifest.dependencies.foottrace='^1.11.1';
+          fs.writeFileSync('package.json',JSON.stringify(manifest,null,2)+'\n');
+          NODE
+          npm install --package-lock-only --ignore-scripts --strict-peer-deps
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          import {createHash} from 'node:crypto';
+          import {execFileSync} from 'node:child_process';
+          const original=JSON.parse(fs.readFileSync('/tmp/dp-cohort-original-manifest.json','utf8'));
+          const manifest=JSON.parse(fs.readFileSync('package.json','utf8'));
+          const expected=structuredClone(original);
+          expected.dependencies.footprintjs='^11.0.0';
+          expected.dependencies.foottrace='^1.11.1';
+          assert.deepEqual(manifest,expected);
+          const lock=JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+          assert.deepEqual(lock.packages[''].dependencies,manifest.dependencies);
+          for(const name of ['footprintjs','foottrace']) {
+            const paths=Object.keys(lock.packages).filter(path=>path.endsWith('node_modules/'+name));
+            assert.deepEqual(paths,['node_modules/'+name]);
+            const entry=lock.packages[paths[0]];
+            assert.equal(entry.version,name==='footprintjs'?'11.0.0':'1.11.1');
+            assert.equal(entry.resolved,'https://registry.npmjs.org/'+name+'/-/'+name+'-'+entry.version+'.tgz');
+            assert.match(entry.integrity,/^sha512-/);
+          }
+          const changed=execFileSync('git',['diff','--name-only'],{encoding:'utf8'}).trim().split('\n').sort();
+          assert.deepEqual(changed,['package-lock.json','package.json']);
+          const sha=file=>createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+          fs.writeFileSync('CURRENT-COHORT-LOCK.json',JSON.stringify({
+            source:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),
+            tree:execFileSync('git',['rev-parse','HEAD^{tree}'],{encoding:'utf8'}).trim(),
+            node:process.version,npm:execFileSync('npm',['--version'],{encoding:'utf8'}).trim(),
+            run:process.env.GITHUB_RUN_ID,attempt:process.env.GITHUB_RUN_ATTEMPT,
+            files:Object.fromEntries(['package.json','package-lock.json'].map(file=>[file,sha(file)])),
+            scope:'Normal lock-only generation; no product installation, runtime execution or publication.'
+          },null,2)+'\n');
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: current-cohort-lock-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            package.json
+            package-lock.json
+            CURRENT-COHORT-LOCK.json

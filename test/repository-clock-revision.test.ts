@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createRetainedFilesystemRepository } from '../src/storage/retainedRepository/index.js';
 import { RepositoryLedger } from '../src/storage/retainedRepository/ledger.js';
@@ -55,17 +54,47 @@ it('drops old idle time before data accepted by a later handle, even with differ
   } finally { await f.close(); }
 });
 
-it('does not delete newly accepted data through an idle older handle with the default performance clock', async () => {
-  const f = await fixture(300, true), old = f.open(), fresh = f.open(), write = candidate('real-clock-idle');
+it('does not charge pre-acceptance idle time through an older handle using the default performance clock', async () => {
+  let elapsed = 0;
+  const performanceClock = vi.spyOn(performance, 'now').mockImplementation(() => elapsed);
+  // Omit monotonicClock: exercise the actual performance.now default while
+  // real filesystem and SQLite work cannot silently consume the short TTL.
+  const f = await fixture(300, true), old = f.open(), fresh = f.open(), write = candidate('default-clock-idle');
   try {
     await old.receipt('initialize-old');
-    await delay(350);
-    const started = performance.now();
+    elapsed = 350;
     await fresh.commit(write);
+    expect(await fresh.receipt(write.operationId)).toMatchObject({ acceptedAgeMs: 0, expiresAgeMs: 300 });
+    const samples = performanceClock.mock.calls.length;
+    elapsed = 351; f.wall(9_000_000_000_000);
     expect(await old.sweep({ limit: 1 })).toEqual({ deleted: 0 });
-    expect(performance.now() - started).toBeLessThan(300);
     await access(f.file(write.operationId));
     expect(await fresh.read(write.batch.ref)).toEqual(write.batch);
+    expect(performanceClock.mock.calls.length).toBeGreaterThan(samples);
+    elapsed = 649; expect(await old.sweep({ limit: 1 })).toEqual({ deleted: 0 });
+    elapsed = 650; expect(await old.sweep({ limit: 1 })).toEqual({ deleted: 0 });
+    elapsed = 651; expect(await old.sweep({ limit: 1 })).toEqual({ deleted: 1 });
+    expect(await fresh.receipt(write.operationId)).toMatchObject({ status: 'expired', dataDeleted: true });
+  } finally { await f.close(); }
+});
+
+it('expires a default-clock intent when a full TTL elapses after its durable acceptance and before publication', async () => {
+  let elapsed = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => elapsed);
+  const f = await fixture(300, true), repo = f.open(), write = candidate('default-clock-publication-gap');
+  const commit = RepositoryLedger.prototype.commit;
+  let gap = true;
+  vi.spyOn(RepositoryLedger.prototype, 'commit').mockImplementation(async function (this: RepositoryLedger) {
+    await commit.call(this);
+    if (gap) { gap = false; elapsed += 300; }
+  });
+  const publication = vi.spyOn(FilesystemRepository.prototype, 'commit');
+  try {
+    await expect(repo.commit(write)).rejects.toMatchObject({ code: 'REPOSITORY_EXPIRED' });
+    expect(publication).not.toHaveBeenCalled();
+    expect(await repo.receipt(write.operationId)).toMatchObject({ status: 'expired', publication: 'unconfirmed',
+      dataDeleted: false, acceptedAgeMs: 0, expiresAgeMs: 300 });
+    await expect(access(f.file(write.operationId))).rejects.toMatchObject({ code: 'ENOENT' });
   } finally { await f.close(); }
 });
 

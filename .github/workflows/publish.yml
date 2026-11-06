@@ -1,0 +1,179 @@
+name: Publish to npm
+"on":
+  release:
+    types: [published]
+permissions:
+  contents: read
+concurrency:
+  group: datapipeline-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+jobs:
+  gates:
+    # Local reusable workflow comes from this SAME release event commit.
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+  candidate:
+    needs: gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+      sha256: ${{ steps.bind.outputs.sha256 }}
+      integrity: ${{ steps.bind.outputs.integrity }}
+      version: ${{ steps.bind.outputs.version }}
+      source: ${{ steps.bind.outputs.source }}
+      tag: ${{ steps.bind.outputs.tag }}
+      run: ${{ steps.bind.outputs.run }}
+      attempt: ${{ steps.bind.outputs.attempt }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          # Only the Node24 producer uploads this name. No matrix job outputs.
+          name: dp-tested-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dp-tested
+      - id: bind
+        name: Bind the exact tested candidate to the release commit
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INCOMING: ${{ runner.temp }}/dp-tested
+          SEALED: ${{ runner.temp }}/dp-sealed
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")" = "$GITHUB_SHA"
+          git show "$GITHUB_SHA:package.json" > "$RUNNER_TEMP/dp-source-package.json"
+          python3 scripts/publish-candidate.py "$RUNNER_TEMP/dp-source-package.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        id: upload
+        with:
+          name: dp-release-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dp-sealed/package.tgz
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    needs: [gates, candidate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # Official tooling only. No source checkout, candidate import or install.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.21.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: ${{ needs.candidate.outputs.artifact }}
+          path: ${{ runner.temp }}/dp-incoming
+          merge-multiple: true
+      - name: Admit and submit the one bound archive
+        env:
+          EXPECTED_SHA256: ${{ needs.candidate.outputs.sha256 }}
+          EXPECTED_SOURCE: ${{ needs.candidate.outputs.source }}
+          EXPECTED_TAG: ${{ needs.candidate.outputs.tag }}
+          EXPECTED_RUN: ${{ needs.candidate.outputs.run }}
+          EXPECTED_ATTEMPT: ${{ needs.candidate.outputs.attempt }}
+          ARCHIVE: ${{ runner.temp }}/dp-incoming/package.tgz
+          PUBLISH_DIRECTORY: ${{ runner.temp }}/dp-publish
+          NODE_AUTH_TOKEN: ''
+          NPM_TOKEN: ''
+          NODE_OPTIONS: ''
+          NODE_PATH: ''
+          NPM_CONFIG_PROVENANCE: 'false'
+          NPM_CONFIG_FETCH_RETRIES: '0'
+        run: |
+          set -euo pipefail
+          test "$(npm --version)" = '11.19.0'
+          python3 <<'PY'
+          import hashlib, os, re, stat
+          from pathlib import Path
+          def require(ok, code):
+              if not ok: raise ValueError(code)
+          e = os.environ
+          require(re.fullmatch(r'[a-f0-9]{64}', e['EXPECTED_SHA256']), 'digest-shape')
+          require(e['EXPECTED_SOURCE'] == e['GITHUB_SHA'], 'source-drift')
+          require(e['EXPECTED_TAG'] == e['GITHUB_REF_NAME'], 'tag-drift')
+          require(e['EXPECTED_RUN'] == e['GITHUB_RUN_ID'], 'run-drift')
+          require(e['EXPECTED_ATTEMPT'] == e['GITHUB_RUN_ATTEMPT'], 'attempt-drift')
+          p = Path(e['ARCHIVE']); s = p.lstat()
+          require(not p.parent.is_symlink() and set(x.name for x in p.parent.iterdir()) == {'package.tgz'}, 'archive-intake')
+          require(stat.S_ISREG(s.st_mode) and s.st_nlink == 1 and 0 < s.st_size <= 64 * 1024 * 1024, 'archive-kind')
+          require(hashlib.sha256(p.read_bytes()).hexdigest() == e['EXPECTED_SHA256'], 'archive-drift')
+          p.chmod(0o444)
+          PY
+          umask 077
+          mkdir "$PUBLISH_DIRECTORY"
+          : > "$PUBLISH_DIRECTORY/user.npmrc"
+          : > "$PUBLISH_DIRECTORY/global.npmrc"
+          export NPM_CONFIG_USERCONFIG="$PUBLISH_DIRECTORY/user.npmrc"
+          export NPM_CONFIG_GLOBALCONFIG="$PUBLISH_DIRECTORY/global.npmrc"
+          cd "$PUBLISH_DIRECTORY"
+          # Private source: no --provenance, token fallback, repack or lifecycle.
+          npm publish "$ARCHIVE" --ignore-scripts --access public --registry=https://registry.npmjs.org
+  verify:
+    needs: [candidate, publish]
+    # Observe an uncertain publish once as well. A failed publish stays failed.
+    if: ${{ always() && needs.candidate.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'failure') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Read back public registry metadata and the actual tarball
+        env:
+          VERSION: ${{ needs.candidate.outputs.version }}
+          EXPECTED_SHA256: ${{ needs.candidate.outputs.sha256 }}
+          EXPECTED_INTEGRITY: ${{ needs.candidate.outputs.integrity }}
+          EVIDENCE: ${{ runner.temp }}/dp-registry-readback
+        run: |
+          set -euo pipefail
+          mkdir "$EVIDENCE"
+          # VERSION is also validated before it enters a URL; no artifact-selected host.
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          curl --fail --silent --show-error --max-time 30 --max-redirs 0 --proto '=https' --max-filesize 1048576 \
+            "https://registry.npmjs.org/footprintjs-datapipeline/$VERSION" > "$EVIDENCE/metadata.json"
+          python3 <<'PY'
+          import json, os
+          from pathlib import Path
+          def require(ok, code):
+              if not ok: raise ValueError(code)
+          def fields(pairs):
+              out = {}
+              for key, value in pairs:
+                  if key in out: raise ValueError('duplicate-registry-key')
+                  out[key] = value
+              return out
+          e = os.environ; m = json.loads((Path(e['EVIDENCE']) / 'metadata.json').read_bytes(), object_pairs_hook=fields)
+          expected = 'https://registry.npmjs.org/footprintjs-datapipeline/-/footprintjs-datapipeline-' + e['VERSION'] + '.tgz'
+          require(m['name'] == 'footprintjs-datapipeline' and m['version'] == e['VERSION'], 'registry-identity')
+          require(m['dist']['tarball'] == expected, 'registry-tarball-url')
+          require(m['dist']['integrity'] == e['EXPECTED_INTEGRITY'], 'registry-integrity')
+          PY
+          curl --fail --silent --show-error --max-time 60 --max-redirs 0 --proto '=https' --max-filesize 67108864 \
+            "https://registry.npmjs.org/footprintjs-datapipeline/-/footprintjs-datapipeline-$VERSION.tgz" > "$EVIDENCE/package.tgz"
+          python3 <<'PY'
+          import base64, hashlib, json, os
+          from pathlib import Path
+          e = os.environ; d = Path(e['EVIDENCE']); b = (d / 'package.tgz').read_bytes()
+          digest = hashlib.sha256(b).hexdigest()
+          integrity = 'sha512-' + base64.b64encode(hashlib.sha512(b).digest()).decode('ascii')
+          if digest != e['EXPECTED_SHA256'] or integrity != e['EXPECTED_INTEGRITY']:
+              raise ValueError('registry-bytes-drift')
+          (d / 'RESULT.json').write_text(json.dumps({'status': 'PASSED', 'version': e['VERSION'],
+            'sha256': digest, 'integrity': integrity, 'bytes': len(b), 'source': e['GITHUB_SHA'],
+            'run': e['GITHUB_RUN_ID'], 'attempt': e['GITHUB_RUN_ATTEMPT']}) + '\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: dp-registry-readback-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dp-registry-readback
+          if-no-files-found: error
+          retention-days: 7

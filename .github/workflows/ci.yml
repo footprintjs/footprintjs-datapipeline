@@ -1,5 +1,8 @@
 name: CI
-on: [push, pull_request]
+"on":
+  push:
+  pull_request:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -7,12 +10,16 @@ jobs:
     uses: footprintjs/ci/.github/workflows/file-size.yml@378ab4e25a73620619f423bf661c292fcb6de538
     with:
       tool_sha: 378ab4e25a73620619f423bf661c292fcb6de538
+      source_sha: ${{ github.event_name == 'release' && github.sha || '' }}
   minimum-runtime:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.13.0'
           cache: npm
@@ -43,13 +50,38 @@ jobs:
       matrix:
         node: [22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Check workflow syntax and expression contexts
+        timeout-minutes: 2
+        env:
+          ACTIONLINT_VERSION: '1.7.12'
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          tool_dir="$(mktemp -d "$RUNNER_TEMP/actionlint.XXXXXX")"
+          trap 'rm -rf "$tool_dir"' EXIT
+          tool_archive="$tool_dir/actionlint.tar.gz"
+          curl --fail --silent --show-error --location \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            --output "$tool_archive"
+          printf '%s  %s\n' "$ACTIONLINT_SHA256" "$tool_archive" | sha256sum --check --strict -
+          tar -xzf "$tool_archive" -C "$tool_dir" actionlint
+          "$tool_dir/actionlint" -shellcheck='' -pyflakes='' \
+            .github/workflows/publish.yml .github/workflows/ci.yml
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: python3 --version
+      - run: ruby --version
+      - name: Check release route DATA and workflow guards
+        run: |
+          python3 -m unittest discover -s scripts -p 'publish_candidate_test.py' -v
+          node --test scripts/publish-route.node-test.mjs scripts/actionlint-step.node-test.mjs
       - name: Check current-cohort inspector controls
         run: |
           node --test scripts/current-cohort/*.node-test.mjs
@@ -59,9 +91,19 @@ jobs:
       - run: npm pack --dry-run
       - name: Check actual packed current cohort
         run: node scripts/current-cohort.mjs "$RUNNER_TEMP/datapipeline-current-cohort-evidence"
+      - name: Preserve the release-tested Node24 candidate
+        if: ${{ github.event_name == 'release' && matrix.node == 24 }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dp-tested-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/datapipeline-current-cohort-evidence/candidate.tgz
+            ${{ runner.temp }}/datapipeline-current-cohort-evidence/candidate.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Retain current-cohort evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: current-cohort-${{ matrix.node }}
           path: ${{ runner.temp }}/datapipeline-current-cohort-evidence

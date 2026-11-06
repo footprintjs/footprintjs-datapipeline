@@ -27,10 +27,10 @@ current-cohort consumer retains bounded evidence even after failure. The
 original suite and disposable Influx service remain; the packed consumer itself
 uses only finite local data and the pure encoder.
 
-`history-diagnostic.yml` is a branch-only diagnostic for the current dependency
-upgrade. It runs the same 256-row, 64-day measurement on an isolated Node 22
-runner and retains its complete output. The test records the child error,
-signal, elapsed time and bounded streams before asserting success. Its 80-second
-child deadline, 90-second test deadline, workload and storage assertions remain
-unchanged. This diagnostic neither replaces nor exempts the full matrix; remove
-the temporary workflow once the failure has been classified.
+The history-measurement test permanently records the child error, signal,
+elapsed time and bounded streams before asserting success. Its 80-second child
+deadline, 90-second test deadline, workload and storage assertions are unchanged.
+The initial null-status failure remains unclassified; later full-matrix and
+isolated passes do not prove its cause. The temporary branch diagnostic workflow
+was removed after its one retained successful run; the full Node22/24 matrix
+continues to exercise the unchanged measurement contract.

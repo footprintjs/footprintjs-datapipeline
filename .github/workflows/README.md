@@ -55,9 +55,15 @@ source checkout, dependency install or candidate execution and has no token
 fallback. This private repository omits `--provenance`; the route adds no release
 App, ci#5 integration or shared release engine. A read-only job downloads public
 registry metadata and the actual tarball and requires the expected identity and
-bytes. Missing or mismatched readback fails; observing an uncertain publish
-does not turn a failed publish into success or authorize a retry.
+bytes. Only HTTP 404 waits, every 30 seconds within one 15-minute budget; other
+errors or mismatched bytes stop immediately. A missing readback at the deadline
+fails; observing an uncertain publish does not turn a failed publish into success
+or authorize a retry.
 
 Before any release, the owner must configure the npm trusted publisher for this
 exact workflow and explicitly give release go. Both remain outstanding. Green
 checks, route/source acceptance and this documentation grant neither action.
+
+The first operational run is 0.11.0 on the owner's go; there is no dispatch or
+dry path. A failure before publish leaves tags and releases where they are,
+and its fix goes through an ordinary 0.11.1 PR, never a publish retry.

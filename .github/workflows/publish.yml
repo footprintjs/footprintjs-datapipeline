@@ -15,7 +15,7 @@ jobs:
       contents: read
   candidate:
     needs: gates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       artifact: ${{ steps.upload.outputs.artifact-id }}
@@ -58,7 +58,7 @@ jobs:
           retention-days: 7
   publish:
     needs: [gates, candidate]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -119,10 +119,10 @@ jobs:
           npm publish "$ARCHIVE" --ignore-scripts --access public --registry=https://registry.npmjs.org
   verify:
     needs: [candidate, publish]
-    # Observe an uncertain publish once as well. A failed publish stays failed.
+    # Read an uncertain publish as well; a bounded 404 wait never republishes.
     if: ${{ always() && needs.candidate.result == 'success' && (needs.publish.result == 'success' || needs.publish.result == 'failure') }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -137,8 +137,34 @@ jobs:
           mkdir "$EVIDENCE"
           # VERSION is also validated before it enters a URL; no artifact-selected host.
           [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
-          curl --fail --silent --show-error --max-time 30 --max-redirs 0 --proto '=https' --max-filesize 1048576 \
-            "https://registry.npmjs.org/footprintjs-datapipeline/$VERSION" > "$EVIDENCE/metadata.json"
+          # One shared read-only budget; no publish retry follows any observation.
+          registry_deadline=$(( $(date +%s) + 900 ))
+          registry_read() {
+            local url="$1" output="$2" limit="$3" request_limit="$4"
+            local remaining status result pause
+            while true; do
+              remaining=$(( registry_deadline - $(date +%s) ))
+              if (( remaining <= 0 )); then
+                echo 'registry-read-deadline' >&2
+                return 1
+              fi
+              if (( request_limit > remaining )); then request_limit="$remaining"; fi
+              if status=$(curl --fail --silent --show-error --max-time "$request_limit" --max-redirs 0 \
+                --proto '=https' --max-filesize "$limit" --output "$output" --write-out '%{http_code}' "$url"); then
+                if [[ "$status" != '200' ]]; then echo "registry-read-status:$status" >&2; return 1; fi
+                return 0
+              else
+                result=$?
+              fi
+              if [[ "$result" != '22' || "$status" != '404' ]]; then return "$result"; fi
+              remaining=$(( registry_deadline - $(date +%s) ))
+              if (( remaining <= 0 )); then echo 'registry-read-deadline' >&2; return 1; fi
+              pause=30
+              if (( pause > remaining )); then pause="$remaining"; fi
+              sleep "$pause"
+            done
+          }
+          registry_read "https://registry.npmjs.org/footprintjs-datapipeline/$VERSION" "$EVIDENCE/metadata.json" 1048576 30
           python3 <<'PY'
           import json, os
           from pathlib import Path
@@ -156,8 +182,7 @@ jobs:
           require(m['dist']['tarball'] == expected, 'registry-tarball-url')
           require(m['dist']['integrity'] == e['EXPECTED_INTEGRITY'], 'registry-integrity')
           PY
-          curl --fail --silent --show-error --max-time 60 --max-redirs 0 --proto '=https' --max-filesize 67108864 \
-            "https://registry.npmjs.org/footprintjs-datapipeline/-/footprintjs-datapipeline-$VERSION.tgz" > "$EVIDENCE/package.tgz"
+          registry_read "https://registry.npmjs.org/footprintjs-datapipeline/-/footprintjs-datapipeline-$VERSION.tgz" "$EVIDENCE/package.tgz" 67108864 60
           python3 <<'PY'
           import base64, hashlib, json, os
           from pathlib import Path

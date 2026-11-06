@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { lstatSync, readFileSync, realpathSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { assertCohort, COHORT } from './graph.mjs';
 
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
@@ -17,12 +17,24 @@ function owner(entry, name) {
   throw new Error(`Package-owner bound exceeded: ${name}`);
 }
 
+function admitExecutableLink(path, modulesRoot) {
+  const target = realpathSync(path);
+  const within = relative(modulesRoot, target);
+  assert.ok(within !== '' && within !== '..' && !within.startsWith(`..${sep}`) && !isAbsolute(within),
+    'Installed-tree inspection refuses unclassified links outside node_modules');
+  assert.ok(lstatSync(target).isFile(), 'Installed-tree inspection refuses unclassified links to non-files');
+}
+
 /** Read-only bounded ordinary npm tree scan; unknown links/stores refuse, never count as no duplicates. */
 export function physicalOwners(consumer) {
   const names = Object.keys(COHORT);
   const physical = Object.fromEntries(names.map(name => [name, []]));
   const nativePackages = [];
-  const pending = [join(consumer, 'node_modules')];
+  const modules = join(consumer, 'node_modules');
+  const root = lstatSync(modules);
+  assert.ok(root.isDirectory() && !root.isSymbolicLink(), 'Installed-tree inspection refuses unclassified links at module roots');
+  const modulesRoot = realpathSync(modules);
+  const pending = [modules];
   let entries = 0;
   while (pending.length) {
     const directory = pending.pop();
@@ -31,7 +43,16 @@ export function physicalOwners(consumer) {
       const path = join(directory, entry.name);
       const direct = basename(directory) === 'node_modules';
       const scoped = basename(dirname(directory)) === 'node_modules' && basename(directory).startsWith('@');
-      if (direct && entry.name === '.bin' && entry.isDirectory()) continue; // npm's executable links only.
+      const binaryDirectory = basename(directory) === '.bin' && basename(dirname(directory)) === 'node_modules';
+      // Admit only npm's immediate executable-file links, not the whole directory.
+      if (binaryDirectory && entry.isSymbolicLink()) {
+        admitExecutableLink(path, modulesRoot);
+        continue;
+      }
+      if (direct && entry.name === '.bin' && entry.isDirectory()) {
+        pending.push(path);
+        continue; // Container classification only; all ordinary descendants are inspected.
+      }
       assert.ok(!entry.isSymbolicLink(), 'Installed-tree inspection refuses unclassified links');
       if (!entry.isDirectory()) continue;
       // A package may legitimately ship hidden assets. Only package-store positions have this refusal.

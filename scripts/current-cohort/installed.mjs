@@ -44,22 +44,23 @@ export function physicalOwners(consumer) {
       const direct = basename(directory) === 'node_modules';
       const scoped = basename(dirname(directory)) === 'node_modules' && basename(directory).startsWith('@');
       const binaryDirectory = basename(directory) === '.bin' && basename(dirname(directory)) === 'node_modules';
+      const packageContainer = direct && (entry.name === '.bin' || entry.name.startsWith('@'));
       // Admit only npm's immediate executable-file links, not the whole directory.
       if (binaryDirectory && entry.isSymbolicLink()) {
         admitExecutableLink(path, modulesRoot);
         continue;
       }
-      if (direct && entry.name === '.bin' && entry.isDirectory()) {
-        pending.push(path);
-        continue; // Container classification only; all ordinary descendants are inspected.
-      }
       assert.ok(!entry.isSymbolicLink(), 'Installed-tree inspection refuses unclassified links');
       if (!entry.isDirectory()) continue;
       // A package may legitimately ship hidden assets. Only package-store positions have this refusal.
-      if (direct || scoped) assert.ok(!entry.name.startsWith('.'), 'Installed-tree inspection refuses unclassified package stores');
-      if ((direct && !entry.name.startsWith('@')) || scoped) {
+      if (direct || scoped) assert.ok(!entry.name.startsWith('.') || (direct && entry.name === '.bin'), 'Installed-tree inspection refuses unclassified package stores');
+      if (direct || scoped) {
         const manifestPath = join(path, 'package.json');
-        const stat = lstatSync(manifestPath);
+        let stat;
+        try { stat = lstatSync(manifestPath); }
+        catch (error) { if (!packageContainer || error.code !== 'ENOENT') throw error; }
+        // Containers may have no own package, but a present identity is never skipped.
+        if (stat === undefined) { pending.push(path); continue; }
         assert.ok(stat.isFile() && !stat.isSymbolicLink() && stat.size <= 1_048_576, 'Unreadable installed package identity');
         const manifest = json(manifestPath);
         assert.ok(typeof manifest.name === 'string' && manifest.name.length > 0, 'Missing installed package identity');

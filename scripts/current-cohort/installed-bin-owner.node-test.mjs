@@ -137,3 +137,58 @@ test('a linked node_modules root is not an ordinary inspected install tree', t =
   symlinkSync(ordinary, join(root, 'node_modules'), 'dir');
   assert.throws(() => physicalOwners(root), /unclassified links/);
 });
+
+// A structural node_modules container may also be a resolver-reachable package.
+// Its own identity must be judged before its descendants, never skipped by name.
+for (const name of Object.keys(VERSIONS)) {
+  for (const nested of [false, true]) {
+    test(`${name}: the ${nested ? 'nested ' : ''}.bin container's OWN same-version package identity is counted`, t => {
+      const root = consumer(t);
+      inspectInstalled(root, CANDIDATE);
+      const parent = nested ? join(root, 'node_modules/container-parent') : root;
+      if (nested) packageData(parent, 'container-parent');
+      const bin = join(parent, 'node_modules/.bin');
+      packageData(bin, name);
+      assert.equal(probe(parent, '.bin'), join(bin, 'entry.json'),
+        'Real Node resolution must reach the second DATA package before owner assertions');
+      const report = physicalOwners(root);
+      assert.deepEqual(report.physical[name], [join(root, 'node_modules', name), bin].sort());
+      assert.ok(report.nativePackages.some(row => row.path === bin && row.installName === '.bin'
+        && row.name === name && row.version === VERSIONS[name]));
+      assert.throws(() => inspectInstalled(root, CANDIDATE), /duplicate physical owner/);
+    });
+  }
+  test(`${name}: a direct scope container's OWN manifest is not skipped before scoped children`, t => {
+    const root = consumer(t), scope = join(root, 'node_modules/@container');
+    inspectInstalled(root, CANDIDATE);
+    packageData(scope, name);
+    packageData(join(scope, 'ordinary-child'), '@container/ordinary-child');
+    // This is an identity-census control, not a claim that the ESM bare-name
+    // grammar accepts a scope with no package component.
+    assert.deepEqual(physicalOwners(root).physical[name], [join(root, 'node_modules', name), scope].sort());
+    assert.throws(() => inspectInstalled(root, CANDIDATE), /duplicate physical owner/);
+  });
+}
+
+test('a classified non-native .bin container still preserves genuine immediate executable links', t => {
+  const { root, bin, target } = ordinaryBin(t);
+  packageData(bin, 'fixture-command-container');
+  symlinkSync(target, join(bin, 'fixture-tool'), 'file');
+  assert.equal(probe(root, '.bin'), join(bin, 'entry.json'));
+  const result = inspectInstalled(root, CANDIDATE);
+  for (const name of Object.keys(VERSIONS)) assert.deepEqual(result.physical[name], [join(root, 'node_modules', name)]);
+});
+
+for (const kind of ['malformed-json', 'missing-name', 'missing-native-version', 'manifest-directory', 'manifest-link']) {
+  test(`a .bin container's own ${kind} identity refuses instead of proving absence`, t => {
+    const { root, bin } = ordinaryBin(t);
+    const manifest = join(bin, 'package.json');
+    if (kind === 'manifest-directory') mkdirSync(manifest);
+    else if (kind === 'manifest-link') symlinkSync(join(root, 'node_modules/foottrace/package.json'), manifest, 'file');
+    else writeFileSync(manifest, kind === 'malformed-json' ? '{' : JSON.stringify(kind === 'missing-name'
+      ? { version: '1.11.1' } : { name: 'foottrace' }));
+    const failure = kind === 'malformed-json' ? SyntaxError : kind === 'missing-name' ? /Missing installed package identity/
+      : kind === 'missing-native-version' ? /Missing native-owner version/ : /Unreadable installed package identity/;
+    assert.throws(() => physicalOwners(root), failure);
+  });
+}

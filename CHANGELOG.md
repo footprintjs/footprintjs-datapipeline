@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Migration: require `footprintjs ^11.0.0` and `foottrace ^1.11.1` for new
+  computations. FootPrint 9/10 runtime cohorts are no longer supported by this
+  source. Hosts exchanging charts and native records must share one physical
+  engine and record-reader installation with the pipeline. Published 0.10.1
+  retains its original FootPrint 10 range; this source change is not a claim
+  that the published package has changed.
+- Preserve existing repository formats, retained reader fixtures, optional
+  feature defaults and public pipeline/storage APIs. Native tracked reads use
+  FootPrint 11's deletion rules; stored history is not rewritten or backfilled.
+
 ## [0.10.1] - 2026-10-28
 
 ### Changed

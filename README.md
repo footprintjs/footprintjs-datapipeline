@@ -10,6 +10,21 @@ npm install footprintjs-datapipeline
 
 Node.js 22.13 or later is required. The commands below build and run this source checkout; the source repository is private, so GitHub source links require access.
 
+## Current source runtime cohort
+
+Migration: the next source release requires `footprintjs ^11.0.0` and
+`foottrace ^1.11.1`. Install a single physical copy of each native dependency
+across the pipeline and host when exchanging charts or native records. This
+source floor is distinct from the already published 0.10.1 package, whose
+FootPrint 10 range does not admit FootPrint 11. A dependency range alone is not
+evidence that a particular installed graph passed the compatibility checks.
+
+Existing stored repository records and the retained 0.9 reader fixtures are
+unchanged. FootPrint 11 changes the native tracked-read contract after deletion;
+new native computations use that engine's rules. Updating this dependency does
+not recreate missing history, rewrite old records or enable optional writers,
+retention policies, collection schedules or application features.
+
 ## Run the example
 
 ```sh

@@ -3,6 +3,10 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  file-size:
+    uses: footprintjs/ci/.github/workflows/file-size.yml@378ab4e25a73620619f423bf661c292fcb6de538
+    with:
+      tool_sha: 378ab4e25a73620619f423bf661c292fcb6de538
   minimum-runtime:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -35,6 +39,7 @@ jobs:
       INFLUX_TEST_ORG: writer-tests
       INFLUX_TEST_TOKEN: writer-integration-test-token
     strategy:
+      fail-fast: false
       matrix:
         node: [22, 24]
     steps:
@@ -48,3 +53,16 @@ jobs:
       - run: npm run check
       - run: npm run example
       - run: npm pack --dry-run
+      - name: Check current-cohort inspector controls
+        run: |
+          node --test scripts/current-cohort/*.test.mjs
+          python3 -m unittest discover -s scripts/current-cohort -p '*_test.py' -v
+      - name: Check actual packed current cohort
+        run: node scripts/current-cohort.mjs "$RUNNER_TEMP/datapipeline-current-cohort-evidence"
+      - name: Retain current-cohort evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-cohort-${{ matrix.node }}
+          path: ${{ runner.temp }}/datapipeline-current-cohort-evidence
+          if-no-files-found: error

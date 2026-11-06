@@ -50,13 +50,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: python3 --version
+      - name: Check current-cohort inspector controls
+        run: |
+          node --test scripts/current-cohort/*.node-test.mjs
+          python3 -m unittest discover -s scripts/current-cohort -p '*_test.py' -v
       - run: npm run check
       - run: npm run example
       - run: npm pack --dry-run
-      - name: Check current-cohort inspector controls
-        run: |
-          node --test scripts/current-cohort/*.test.mjs
-          python3 -m unittest discover -s scripts/current-cohort -p '*_test.py' -v
       - name: Check actual packed current cohort
         run: node scripts/current-cohort.mjs "$RUNNER_TEMP/datapipeline-current-cohort-evidence"
       - name: Retain current-cohort evidence

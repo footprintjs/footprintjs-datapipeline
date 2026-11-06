@@ -18,7 +18,19 @@ acceptance gates. These workflows perform no package publication, source push
 or release dispatch. The publisher and release version remain separate review
 decisions.
 
-Each Node 22/24 job additionally runs the adjacent inert inspector controls and
-the real packed current-cohort consumer, retaining bounded evidence even after
-failure. This preserves the full original suite and disposable Influx service;
-the packed consumer itself uses only finite local data and the pure encoder.
+Each Node 22/24 job runs the short adjacent Node/Python inspector controls
+before the unchanged full check, so an unrelated full-suite failure cannot keep
+them unreached. The two Node-owned files use `.node-test.mjs` names and the
+explicit Node test command; Vitest's configuration and original tests stay
+unchanged. After the existing full check/example/dry pack, the real packed
+current-cohort consumer retains bounded evidence even after failure. The
+original suite and disposable Influx service remain; the packed consumer itself
+uses only finite local data and the pure encoder.
+
+`history-diagnostic.yml` is a branch-only diagnostic for the current dependency
+upgrade. It runs the same 256-row, 64-day measurement on an isolated Node 22
+runner and retains its complete output. The test records the child error,
+signal, elapsed time and bounded streams before asserting success. Its 80-second
+child deadline, 90-second test deadline, workload and storage assertions remain
+unchanged. This diagnostic neither replaces nor exempts the full matrix; remove
+the temporary workflow once the failure has been classified.

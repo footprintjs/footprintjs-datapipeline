@@ -1,0 +1,28 @@
+name: History measurement diagnostic
+on:
+  push:
+    branches: [codex/dp-fp11-cohort-20261105]
+permissions:
+  contents: read
+jobs:
+  isolated-history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Run the unchanged bounded measurement in isolation
+        run: |
+          set -o pipefail
+          npx --no-install vitest run test/laptop-history-measurement.test.ts 2>&1 | tee history-diagnostic.log
+      - name: Retain the actual result even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-history-diagnostic
+          path: history-diagnostic.log
+          if-no-files-found: error

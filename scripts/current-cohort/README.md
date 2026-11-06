@@ -6,13 +6,21 @@ Role: a hosted proof driver and its inert controls; no publisher, source/runtime
 
 ## Hosted use
 
-After normal root `npm ci` and the existing full check/example in EACH Node22/24 job:
+After normal root `npm ci`, run the short controls FIRST in each Node22/24 job,
+then keep the existing full check/example before the actual packed consumer:
 
 ```sh
-node --test scripts/current-cohort/*.test.mjs
-python3 -m unittest discover -s scripts/current-cohort -p '*_test.py'
+node --test scripts/current-cohort/*.node-test.mjs
+python3 -m unittest discover -s scripts/current-cohort -p '*_test.py' -v
+npm run check
+npm run example
+npm pack --dry-run
 node scripts/current-cohort.mjs "$RUNNER_TEMP/datapipeline-current-cohort-evidence"
 ```
+
+`graph.node-test.mjs` and `installed.node-test.mjs` belong to Node's explicit
+`--test` runner. Their names keep that runner distinct from the unchanged
+Vitest suite; no Vitest exclusion or old-test selection is added.
 
 The evidence path must be fresh and absolute. Upload only that exact evidence directory with `if: always()`; it contains candidate tar/hash metadata, command arguments/cwd/status/stdout/stderr, actual npm-ls output, the generated consumer manifest/lock, before/after physical owner facts, before/after archive/lock/payload receipts and RESULT. It never includes the install tree. Each command has a finite timeout and hard-refuses failure. A timed-out subprocess is reported as requiring the hosted VM's process-tree teardown; no descendant-cleanup claim is made. No local full/install/build run is proposed.
 
@@ -38,5 +46,3 @@ This is an installed public-package smoke, not a replacement for the existing fu
 ## Controls, mutations and status
 
 Adjacent controls catch wrong current versions, candidate version drift, another resolved owner, nested lock owners and hidden physical owners even with unchanged version/clean lock data. Filesystem controls exercise legal hidden assets plus a nested alias, ordinary/scoped aliases, absent/unreadable/conflicting identity, unclassified symlinks and hidden store refusal. Archive controls use stdlib-generated inert DATA to distinguish exact positive joins from identical-tar/different-path, wrong integrity/root spec, changed held hashes, changed same-version payload/modes, extra members/directories, duplicates and links. Useful copied faults for root: skip hidden/nested traversal; use slot basename instead of manifest identity; drop physical cardinality; remove archive integrity or mode/inventory equality; neutralize the consumer's expected mean/fold/control assertions one at a time. Current controls should fail, originals restored before actual run. No test count, pass or mutation result is claimed by this author.
-
-AUTHOR DRAFT ONLY: authored from fresh root-supplied DP `bf8130534263d0be69aa3638dbc4584eb03810ec/treeaf6392210126ffe7cec3e0b2ce68be86b3c76f20`, full root README, public source/example/contracts and existing tests. No active DP source was edited and no target source, tests, install, build, imports or network were executed by the child. Root materializes and executes, and Claude's exact-head gate remains required.

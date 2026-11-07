@@ -63,6 +63,7 @@ or authorize a retry.
 Before any release, the owner must configure the npm trusted publisher for this
 exact workflow and explicitly give release go. Both remain outstanding. Green
 checks, route/source acceptance and this documentation grant neither action.
+Npm binds the repository and workflow filename, so anyone with repository write access could publish from a branch copy.
 
 The first operational run is 0.11.0 on the owner's go; there is no dispatch or
 dry path. A failure before publish leaves tags and releases where they are,

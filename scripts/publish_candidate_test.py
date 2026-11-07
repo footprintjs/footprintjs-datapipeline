@@ -75,7 +75,7 @@ class CandidateFixture(unittest.TestCase):
         self.assertIsNotNone(BINDER, 'The candidate binder must be present before admission can pass')
         with self.assertRaisesRegex(ValueError, code):
             BINDER.bind(self.source, self.env)
-        self.assertFalse((self.root / 'sealed' / 'package.tgz').exists())
+        self.assertFalse((Path(self.env['SEALED']) / 'package.tgz').exists())
 
     def test_positive_seals_exact_original_bytes_and_closed_origin_fields(self):
         self.assertIsNotNone(BINDER, 'The candidate binder must be present before admission can pass')
@@ -88,6 +88,41 @@ class CandidateFixture(unittest.TestCase):
     def test_forged_pack_with_same_name_version_and_new_matching_digest_is_not_source_manifest(self):
         self.pack({**self.manifest, 'description': 'not in immutable source'})
         self.refuse('source-manifest-drift')
+
+    def test_manifest_json_types_are_preserved_recursively(self):
+        for index, (source_value, packed_value) in enumerate([
+            (False, 0), (True, 1), (0, False), (1, True), (1, 1.0),
+            ({'nested': False}, {'nested': 0}),
+            ([{'nested': True}], [{'nested': 1}]),
+            ([False], [0]),
+        ]):
+            with self.subTest(source=source_value, packed=packed_value):
+                self.source.write_text(json.dumps({**self.manifest, 'sideEffects': source_value}))
+                self.pack({**self.manifest, 'sideEffects': packed_value})
+                self.env['SEALED'] = str(self.root / f'sealed-type-{index}')
+                self.refuse('source-manifest-drift')
+
+    def test_identical_json_types_seal_with_reordered_object_keys(self):
+        record = {'null': None, 'list': [False, True, 0, 1, 1.0, '1'],
+                  'nested': {'first': False, 'second': 0}}
+        source = {**self.manifest, 'record': record}
+        self.source.write_text(json.dumps(source))
+        packed = dict(reversed(list(source.items())))
+        packed['record'] = {**record, 'nested': {'second': 0, 'first': False}}
+        self.pack(packed)
+        result = BINDER.bind(self.source, self.env)
+        self.assertEqual(result['sha256'], hashlib.sha256(self.bytes).hexdigest())
+        self.assertEqual((self.root / 'sealed' / 'package.tgz').read_bytes(), self.bytes)
+
+    def test_manifest_array_order_is_preserved(self):
+        self.source.write_text(json.dumps({**self.manifest, 'files': ['dist', 'README.md']}))
+        self.pack({**self.manifest, 'files': ['README.md', 'dist']})
+        self.refuse('source-manifest-drift')
+
+    def test_metadata_byte_count_preserves_its_integer_type(self):
+        self.metadata['bytes'] = float(self.metadata['bytes'])
+        self.save_metadata()
+        self.refuse('tested-candidate-drift')
 
     def test_wrong_package_manifest(self):
         self.pack({**self.manifest, 'name': 'other-package'})
@@ -168,7 +203,8 @@ class CandidateFixture(unittest.TestCase):
                 self.env[key] = old
 
     def test_release_states_refuse(self):
-        for field, value in [('action', 'created'), ('draft', True), ('prerelease', True)]:
+        for field, value in [('action', 'created'), ('draft', True), ('prerelease', True),
+                             ('draft', 0), ('prerelease', 0)]:
             with self.subTest(field=field):
                 event = json.loads(json.dumps(self.event_data))
                 target = event if field == 'action' else event['release']

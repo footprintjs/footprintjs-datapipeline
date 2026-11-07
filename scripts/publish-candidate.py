@@ -22,6 +22,17 @@ def closed_json(data):
     return json.loads(data, object_pairs_hook=fields)
 
 
+def same_json(left, right):
+    """Preserve decoded value types and list order; object key order is immaterial."""
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return left.keys() == right.keys() and all(same_json(left[key], right[key]) for key in left)
+    if isinstance(left, list):
+        return len(left) == len(right) and all(same_json(a, b) for a, b in zip(left, right))
+    return left == right
+
+
 def regular(path, limit):
     s = path.lstat()
     if not stat.S_ISREG(s.st_mode) or s.st_nlink != 1 or not 0 < s.st_size <= limit:
@@ -55,7 +66,7 @@ def bind(source_path, env):
     metadata = closed_json(regular(incoming / 'candidate.json', 8192))
     data = regular(incoming / 'candidate.tgz', 64 * 1024 * 1024)
     digest = hashlib.sha256(data).hexdigest()
-    if metadata != {'name': source['name'], 'version': version, 'bytes': len(data), 'sha256': digest}:
+    if not same_json(metadata, {'name': source['name'], 'version': version, 'bytes': len(data), 'sha256': digest}):
         raise ValueError('tested-candidate-drift')
     # The existing packed check already proves complete payload bytes/modes. This
     # narrower stdlib DATA read joins its manifest to the immutable source blob.
@@ -75,7 +86,7 @@ def bind(source_path, env):
                 if len(payload) != item.size:
                     raise ValueError('archive-manifest-size')
                 manifests.append(closed_json(payload))
-    if manifests != [source]:
+    if not same_json(manifests, [source]):
         raise ValueError('source-manifest-drift')
     output = Path(env['SEALED'])
     output.mkdir()  # Fresh path, never mix a previous attempt.

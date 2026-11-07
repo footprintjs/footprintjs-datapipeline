@@ -1,6 +1,6 @@
 {
   "name": "footprintjs-datapipeline",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "TypeScript collection and derivation flows with recorded lineage and publication evidence, built on FootPrint.",
   "type": "module",
   "license": "MIT",

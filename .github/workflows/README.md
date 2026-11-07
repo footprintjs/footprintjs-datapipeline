@@ -14,9 +14,9 @@ scripts. Its retained output files were adopted verbatim, then the temporary
 workflow was removed. A declared singleton is not an installed singleton.
 
 The final candidate must pass ordinary locked installation and all current
-acceptance gates. These workflows perform no package publication, source push
-or release dispatch. The publisher and release version remain separate review
-decisions.
+acceptance gates. Ordinary push/PR checks do not publish, push source or dispatch
+a release. The separate release route below uses the same current gates; a
+previous source run cannot replace its release-commit proof.
 
 Each Node 22/24 job runs the short adjacent Node/Python inspector controls
 before the unchanged full check, so an unrelated full-suite failure cannot keep
@@ -34,3 +34,37 @@ The initial null-status failure remains unclassified; later full-matrix and
 isolated passes do not prove its cause. The temporary branch diagnostic workflow
 was removed after its one retained successful run; the full Node22/24 matrix
 continues to exercise the unchanged measurement contract.
+
+## Stable release route
+
+The sole release entrypoint is `.github/workflows/publish.yml`, triggered by a
+published GitHub release. Keep that exact filename: npm's owner-configured
+trusted publisher binds to it. Version 0.11.0 belongs in the later pure release
+PR with its CHANGELOG and normal lock update; adding this route changes no
+package version and grants no release go.
+
+The route reruns the complete local `ci.yml` at the release event commit,
+including both full Node22/24 profiles, minimum-runtime, file-size, examples,
+Influx service and packed-consumer checks. Its fixed Node24 producer supplies
+the exact archive tested by that consumer. An unprivileged binder checks source,
+release tag, run, attempt, manifest and archive identity, then passes one sealed
+archive by its artifact ID and digest. The publisher does not repack it.
+
+Only the isolated artifact-only publisher has `id-token: write`. It performs no
+source checkout, dependency install or candidate execution and has no token
+fallback. This private repository omits `--provenance`; the route adds no release
+App, ci#5 integration or shared release engine. A read-only job downloads public
+registry metadata and the actual tarball and requires the expected identity and
+bytes. Only HTTP 404 waits, every 30 seconds within one 15-minute budget; other
+errors or mismatched bytes stop immediately. A missing readback at the deadline
+fails; observing an uncertain publish does not turn a failed publish into success
+or authorize a retry.
+
+Before any release, the owner must configure the npm trusted publisher for this
+exact workflow and explicitly give release go. Both remain outstanding. Green
+checks, route/source acceptance and this documentation grant neither action.
+Npm binds the repository and workflow filename, so anyone with repository write access could publish from a branch copy.
+
+The first operational run is 0.11.0 on the owner's go; there is no dispatch or
+dry path. A failure before publish leaves tags and releases where they are,
+and its fix goes through an ordinary 0.11.1 PR, never a publish retry.

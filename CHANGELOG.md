@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## [0.11.1] - 2026-11-15
+
 ### Changed
 
 - Admit FootPrint 12 alongside the supported FootPrint 11 range, retaining

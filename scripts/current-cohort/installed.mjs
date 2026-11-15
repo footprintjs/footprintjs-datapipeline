@@ -80,7 +80,7 @@ export function physicalOwners(consumer) {
   return { physical, nativePackages, inspectedEntries: entries };
 }
 
-export function inspectInstalled(consumer, candidateVersion) {
+export function inspectInstalled(consumer, candidateVersion, profile = '11') {
   const names = Object.keys(COHORT);
   const { physical, nativePackages, inspectedEntries } = physicalOwners(consumer);
   const rootRequire = createRequire(join(consumer, 'package.json'));
@@ -95,5 +95,5 @@ export function inspectInstalled(consumer, candidateVersion) {
     .filter(path => path.endsWith(`node_modules/${name}`)).sort()]));
   const versions = Object.fromEntries([...names, 'footprintjs-datapipeline'].map(name =>
     [name, json(join(consumer, 'node_modules', name, 'package.json')).version]));
-  return assertCohort({ versions, root, dp, physical, lockPaths, nativePackages, inspectedEntries }, candidateVersion);
+  return assertCohort({ versions, root, dp, physical, lockPaths, nativePackages, inspectedEntries }, candidateVersion, profile);
 }

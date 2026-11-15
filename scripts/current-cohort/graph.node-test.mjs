@@ -32,3 +32,25 @@ for (const name of ['footprintjs', 'foottrace']) {
 test('does not mistake an old candidate for the newly packed source', () => {
   assert.throws(() => assertCohort(facts(), 'another-source-version'), /candidate version drift/);
 });
+
+test('the declared Footprint 12 profile admits its exact public engine with the same record owner', () => {
+  const f = facts(); f.versions.footprintjs = '12.0.0';
+  assert.equal(assertCohort(f, 'candidate-source-version', '12'), f);
+  assert.throws(() => assertCohort(f, 'candidate-source-version', '11'), /wrong current cohort/);
+  assert.throws(() => assertCohort(facts(), 'candidate-source-version', '12'), /wrong current cohort/);
+});
+
+for (const name of ['footprintjs', 'foottrace']) {
+  test(`Footprint 12: ${name} must still have exactly one actual owner`, () => {
+    const f = facts(); f.versions.footprintjs = '12.0.0';
+    assert.equal(assertCohort(f, 'candidate-source-version', '12'), f);
+    f.physical[name].push(`/consumer/node_modules/hidden/node_modules/${name}`);
+    assert.throws(() => assertCohort(f, 'candidate-source-version', '12'), /duplicate physical owner/);
+  });
+}
+
+test('cohort choice is closed and cannot silently select an unreviewed or default engine', () => {
+  for (const profile of ['10', 'latest', '__proto__', '', null, 12]) {
+    assert.throws(() => assertCohort(facts(), 'candidate-source-version', profile), /Unknown native cohort/);
+  }
+});

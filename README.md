@@ -12,16 +12,24 @@ Node.js 22.13 or later is required. The commands below build and run this source
 
 ## Current source runtime cohort
 
-Migration: the next source release requires `footprintjs ^11.0.0` and
-`foottrace ^1.11.1`. Install a single physical copy of each native dependency
+Migration: the next source release accepts `footprintjs ^11.0.0 || ^12.0.0`
+and retains `foottrace ^1.11.1`. Install a single physical copy of each native dependency
 across the pipeline and host when exchanging charts or native records. This
-source floor is distinct from the already published 0.10.1 package, whose
-FootPrint 10 range does not admit FootPrint 11. A dependency range alone is not
+source change extends the published 0.11.0 package's FootPrint 11 range; it does
+not change that published package. A dependency range alone is not
 evidence that a particular installed graph passed the compatibility checks.
 
+The packed-consumer gate installs the same source archive separately with exact
+public FootPrint 11.0.0 and 12.0.0, each sharing Foottrace 1.11.1. Both consumers
+compile public declarations and execute collection, derivation, stored native
+trace replay, scheduler/SQLite reopen and terminal failure/pause/cancellation
+checks. The existing Node 22/24 full checks and owned Influx tests remain. This
+is compatibility of the public ports, not an assertion that different engine
+majors apply identical tracking or privacy rules.
+
 Existing stored repository records and the retained 0.9 reader fixtures are
-unchanged. FootPrint 11 changes the native tracked-read contract after deletion;
-new native computations use that engine's rules. Updating this dependency does
+unchanged. New native computations use the selected engine's tracked-read and
+privacy rules. Updating this dependency does
 not recreate missing history, rewrite old records or enable optional writers,
 retention policies, collection schedules or application features.
 

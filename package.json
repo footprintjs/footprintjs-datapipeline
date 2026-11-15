@@ -59,7 +59,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "footprintjs": "^11.0.0",
+    "footprintjs": "^11.0.0 || ^12.0.0",
     "foottrace": "^1.11.1"
   },
   "devDependencies": {

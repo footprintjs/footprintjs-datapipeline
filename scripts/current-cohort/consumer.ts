@@ -59,6 +59,20 @@ assert.equal(committed(await pipeline.collect(request)).id, first.id);
 assert.equal(acquisitions, 1, 'Retry must reconcile rather than reacquire');
 assert.equal(collected.trace.status, 'stored');
 const derived = await pipeline.derive({ methodRef: transform.ref, idempotencyKey: 'current-cohort:derive', inputBatchRefs: [first], window });
+assert.equal(derived.trace.status, 'stored');
+// Read the producer's actual serialized native records through a reopened
+// public store, then replay their committed receipt with the shared reader.
+const reopenedTraces = createFilesystemTraceStore({ directory: join(directory, 'traces') });
+for (const result of [collected, derived]) {
+  if (result.trace.status !== 'stored') throw new Error('Expected a stored native pipeline trace');
+  const trace = await reopenedTraces.read(result.trace.ref);
+  assert.equal(trace?.operationId, result.commit.operationId);
+  assert.ok(trace?.value && typeof trace.value === 'object' && !Array.isArray(trace.value));
+  const snapshot = trace.value as unknown as Parameters<typeof stateAt>[0];
+  assert.ok(snapshot && Array.isArray(snapshot.commitLog) && snapshot.commitLog.length > 0,
+    'The installed engine must produce a real committed native record');
+  assert.deepEqual(stateAt(snapshot, snapshot.commitLog.length - 1).state.receipt, result.commit);
+}
 const batch = await pipeline.read(committed(derived));
 assert.equal(batch?.kind, 'batch');
 if (batch?.kind !== 'batch') throw new Error('Missing derived batch');

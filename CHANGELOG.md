@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Admit FootPrint 12 alongside the supported FootPrint 11 range, retaining
+  Foottrace `^1.11.1`, existing repository formats and public pipeline APIs.
+- Qualify both exact public engine floors through normal independent installed
+  consumers of the same packed source bytes. Checks include single physical
+  engine/record ownership, strict public declarations and replay of the actual
+  stored collection/derivation records. Engine tracking/privacy laws remain
+  those of the selected engine; stored history is not rewritten.
+
 ## [0.11.0] - 2026-11-07
 
 ### Changed

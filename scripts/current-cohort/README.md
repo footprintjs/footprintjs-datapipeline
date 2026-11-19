@@ -36,11 +36,13 @@ The evidence path must be fresh and absolute. Upload only that exact evidence di
 The facade runs the package's normal `npm pack --pack-destination`, including
 its prepack build. One outside-checkout consumer declares that archive and the
 exact FootPrint 14.0.0 and Foottrace 2.1.0 floors. The compiler and Node type
-versions come from the checked-in source lock. npm uses that lock as the
-starting point, resolves the local candidate and installs the consumer in strict
-peer mode offline from the cache populated by root `npm ci`. Registry entries
-in the resulting consumer lock must match the checked-in versions, URLs and
-integrities. The candidate's own version comes from the source manifest.
+versions come from the checked-in source lock. The fixture lock uses the
+checked-in registry entries and binds the local candidate to its source version,
+peer requirements and actual archive integrity. `npm ci --offline
+--strict-peer-deps` installs that locked graph from the cache populated by root
+`npm ci`. After installation the candidate manifest must match the source
+manifest. The archive check verifies that the fixture lock and actual payload
+still match before and after the consumer runs.
 
 The evidence root retains `candidate.tgz`, `candidate.json`, `cohort.json`,
 before/after installed and archive facts and `RESULT.json`. The unchanged

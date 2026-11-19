@@ -24,10 +24,10 @@ current-cohort consumer retains bounded evidence even after failure. The
 original suite and disposable Influx service remain; the packed consumer itself
 uses only finite local data and the pure encoder.
 
-The consumer starts from the checked-in lock and installs the actual packed
-candidate outside the checkout with npm offline. It verifies the dependency
-resolutions against the source lock, the physical package owners and the archive
-payload before compiling and running the public consumer. The existing root
+The consumer uses checked-in resolutions and a fixture lock bound to the actual
+packed candidate. It installs outside the checkout with `npm ci --offline` and
+verifies the packed manifest, physical package owners and archive payload before
+compiling and running the public consumer. The existing root
 candidate artifact paths and both Node release gates are preserved.
 
 The history-measurement test permanently records the child error, signal,

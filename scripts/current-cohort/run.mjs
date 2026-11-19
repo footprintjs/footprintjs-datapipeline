@@ -15,6 +15,32 @@ const inside = (parent, child) => {
   return name === '' || (!isAbsolute(name) && name !== '..' && !name.startsWith(`..${sep}`));
 };
 
+function consumerLock(locked, consumerManifest, manifest, archiveBytes) {
+  const { name, version, dependencies, devDependencies } = consumerManifest;
+  // The fixture needs two native packages, two compiler tools and the Node
+  // types' transitive package. Use the checkout's immutable registry inputs.
+  const packages = { '': { name, version, dependencies, devDependencies } };
+  for (const packageName of [...Object.keys(COHORT), ...Object.keys(devDependencies), 'undici-types']) {
+    const path = `node_modules/${packageName}`;
+    const entry = locked[path];
+    assert.ok(entry?.integrity, `Consumer package ${path} has no checked-in registry input`);
+    packages[path] = { ...entry };
+    if (Object.hasOwn(COHORT, packageName)) delete packages[path].dev;
+  }
+  packages[`node_modules/${manifest.name}`] = {
+    version: manifest.version,
+    resolved: dependencies[manifest.name],
+    integrity: `sha512-${createHash('sha512').update(archiveBytes).digest('base64')}`,
+    license: manifest.license,
+    engines: manifest.engines,
+    dependencies: manifest.dependencies,
+    optionalDependencies: manifest.optionalDependencies,
+    peerDependencies: manifest.peerDependencies,
+    peerDependenciesMeta: manifest.peerDependenciesMeta,
+  };
+  return { name, version, lockfileVersion: 3, requires: true, packages };
+}
+
 /** Hosted proof driver only. No publication or consumer/source manifest rewriting. */
 export async function runCurrentCohort(sourceInput, evidenceInput) {
   assert.ok(typeof evidenceInput === 'string' && isAbsolute(evidenceInput), 'Pass one fresh absolute evidence directory');
@@ -51,8 +77,7 @@ export async function runCurrentCohort(sourceInput, evidenceInput) {
   try {
     const manifest = json(join(source, 'package.json'));
     assert.equal(manifest.name, 'footprintjs-datapipeline');
-    const sourceLockfile = join(source, 'package-lock.json');
-    const locked = json(sourceLockfile).packages;
+    const locked = json(join(source, 'package-lock.json')).packages;
     const pack = join(work, 'pack'); mkdirSync(pack);
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     command(npm, ['pack', '--pack-destination', pack], source); // Normal own prepack/build, never --ignore-scripts.
@@ -68,8 +93,9 @@ export async function runCurrentCohort(sourceInput, evidenceInput) {
     save('candidate.json', { name: manifest.name, version: manifest.version, bytes: bytes.length,
       sha256: archiveSha256 });
     const consumer = join(work, 'consumer'); mkdirSync(consumer);
+    const archiveSpec = `file:${relative(consumer, archive).split(sep).join('/')}`;
     const consumerManifest = { name: 'datapipeline-current-cohort-check', version: '0.0.0', private: true, type: 'module',
-      dependencies: { 'footprintjs-datapipeline': `file:${archive}`, ...COHORT },
+      dependencies: { [manifest.name]: archiveSpec, ...COHORT },
       devDependencies: { typescript: locked['node_modules/typescript'].version, '@types/node': locked['node_modules/@types/node'].version } };
     writeFileSync(join(consumer, 'package.json'), JSON.stringify(consumerManifest, null, 2) + '\n');
     writeFileSync(join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: {
@@ -79,21 +105,15 @@ export async function runCurrentCohort(sourceInput, evidenceInput) {
     copyFileSync(join(ownFolder, 'consumer.ts'), join(consumer, 'consumer.ts'));
     copyFileSync(join(ownFolder, 'prepared.ts'), join(consumer, 'prepared.ts'));
     const consumerLockfile = join(consumer, 'package-lock.json');
-    // Start with the checked-in resolutions already cached by root npm ci. Let
-    // npm generate the consumer graph for the different manifest and local tarball.
-    copyFileSync(sourceLockfile, consumerLockfile);
-    command(npm, ['install', '--offline', '--strict-peer-deps', '--ignore-scripts', '--no-audit', '--no-fund'], consumer);
-    const lockSha256 = createHash('sha256').update(readFileSync(consumerLockfile)).digest('hex');
+    // npm 10 can re-resolve a seeded lock during install. Supply the closed
+    // fixture lock so both npm majors can perform a normal frozen install.
+    const lockBytes = JSON.stringify(consumerLock(locked, consumerManifest, manifest, bytes), null, 2) + '\n';
+    writeFileSync(consumerLockfile, lockBytes);
+    const lockSha256 = createHash('sha256').update(lockBytes).digest('hex');
     copyFileSync(consumerLockfile, join(evidence, 'consumer-lock.json'));
-    for (const [path, entry] of Object.entries(json(consumerLockfile).packages)) {
-      if (path === '' || path === 'node_modules/footprintjs-datapipeline') continue;
-      const expected = locked[path];
-      assert.ok(expected?.integrity, `Consumer package ${path} has no checked-in registry input`);
-      for (const field of ['version', 'resolved', 'integrity']) {
-        assert.equal(entry[field], expected[field], `Consumer package ${path} drifted from source lock (${field})`);
-      }
-    }
     copyFileSync(join(consumer, 'package.json'), join(evidence, 'consumer-package.json'));
+    command(npm, ['ci', '--offline', '--strict-peer-deps', '--ignore-scripts', '--no-audit', '--no-fund'], consumer);
+    assert.deepEqual(json(join(consumer, 'node_modules', manifest.name, 'package.json')), manifest, 'Packed manifest drift');
     command(npm, ['ls', '--all', '--json'], consumer);
     save('installed-before.json', inspectInstalled(consumer, manifest.version));
     command('python3', [join(ownFolder, 'archive_payload.py'), archive, consumer,

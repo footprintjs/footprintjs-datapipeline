@@ -1,8 +1,16 @@
 # Current-cohort test driver
 
-Role: a hosted proof driver and its inert controls; no publisher, source/runtime adapter or alternate engine. This folder is sealed behind `scripts/current-cohort.mjs`. It preserves the normal package prepack/build and installs an actual resulting tarball in a fresh consumer outside the checkout. It does not change source versions, root manifests/locks, stored profiles, fixtures or generation rules.
+This folder is sealed behind `scripts/current-cohort.mjs`. The hosted driver
+builds the package with its normal prepack command and installs the resulting
+archive in a fresh consumer outside the checkout.
 
-`run.mjs` owns the finite commands and retained evidence; `installed.mjs` reads actual ordinary npm owner locations; `graph.mjs` checks the exact cohort and single-owner law. `matrix.mjs` runs the closed 11/12 profiles and requires the same original packed bytes. `archive_payload.py` joins the original pack bytes/root lock to the complete installed DP payload. `consumer.ts` is compiled against installed public declarations and runs as emitted ESM over the actual installed libraries. The adjacent tests use only inert path/version/manifest facts or temporary directory/archive DATA: no fake native modules execute or stand in for actual consumer proof.
+`run.mjs` owns the finite commands and retained evidence. `installed.mjs` reads
+ordinary npm owner locations and `graph.mjs` checks the cohort and shared owners.
+`archive_payload.py` checks the original pack bytes, the consumer lock and the
+complete installed package payload. `consumer.ts` and its `prepared.ts` fixture
+compile against installed public declarations and run as emitted ESM over the
+actual installed libraries. The adjacent Node and Python controls use inert
+path, version and manifest facts or temporary directory and archive data.
 
 ## Hosted use
 
@@ -25,16 +33,18 @@ Vitest suite; no Vitest exclusion or old-test selection is added.
 
 The evidence path must be fresh and absolute. Upload only that exact evidence directory with `if: always()`; it contains candidate tar/hash metadata, command arguments/cwd/status/stdout/stderr, actual npm-ls output, the generated consumer manifest/lock, before/after physical owner facts, before/after archive/lock/payload receipts and RESULT. It never includes the install tree. Each command has a finite timeout and hard-refuses failure. A timed-out subprocess is reported as requiring the hosted VM's process-tree teardown; no descendant-cleanup claim is made. No local full/install/build run is proposed.
 
-The facade runs the package's own `npm pack --pack-destination` without `--ignore-scripts`: normal prepack builds the candidate. Separate outside-checkout consumers declare the actual `file:/...candidate.tgz`, exact public `footprintjs:11.0.0` or `12.0.0`, shared `foottrace:1.11.1`, and fixed development-only TypeScript5.9.3 / Node type22.19.0. The facade compares both original candidate identities, sizes and SHA256 digests. A different or missing candidate cannot inherit matrix acceptance. `npm install --strict-peer-deps` creates each ordinary lock; no alias, override, fake version, copied node_modules, lock splice or legacy-peer escape exists. The candidate version is read from the actual source manifest and checked after installation; this check chooses no release version.
+The facade runs the package's normal `npm pack --pack-destination`, including
+its prepack build. One outside-checkout consumer declares that archive and the
+exact FootPrint 14.0.0 and Foottrace 2.1.0 floors. The compiler and Node type
+versions come from the checked-in source lock. npm uses that lock as the
+starting point, resolves the local candidate and installs the consumer in strict
+peer mode offline from the cache populated by root `npm ci`. Registry entries
+in the resulting consumer lock must match the checked-in versions, URLs and
+integrities. The candidate's own version comes from the source manifest.
 
-The original evidence root and its release-tested `candidate.tgz`/`candidate.json`
-remain the FootPrint 11 profile. The FootPrint 12 profile lives in `engine-12/`;
-each has `cohort.json`, before/after installed/archive facts and its own RESULT.
-`MATRIX.json` is the aggregate result and requires both profiles plus identical
-packed bytes. The unchanged release workflow cannot preserve its Node24
-candidate unless this facade succeeds. Unknown profiles refuse rather than
-silently falling back to engine 11. The old inspector controls and their
-default 11 profile remain unchanged.
+The evidence root retains `candidate.tgz`, `candidate.json`, `cohort.json`,
+before/after installed and archive facts and `RESULT.json`. The unchanged
+release workflow preserves its Node 24 candidate only after this check passes.
 
 Both root and candidate resolve FP/FT through their real installed package contexts. Package-owner directory identity is compared, so an ESM/CJS conditional entry-file difference is not a false duplicate. At ordinary direct/scoped node_modules package locations, actual regular package.json DATA supplies the package name/version; npm alias slots therefore count as owners. Missing/unreadable package identity refuses rather than proving absence. The bounded filesystem scan also finds owners absent from npm's lock graph, including copies of the same version. Hidden assets inside packages are scanned normally; only hidden package-store positions at node_modules boundaries are refused. An ordinary `.bin` directory directly below any node_modules is traversed, including ordinary and dot descendants. Only its immediate executable-file links may resolve to a regular file within the canonical consumer node_modules tree; directory, outside, prefix-sibling and deeper links refuse. A linked module-root or whole `.bin` container also refuses. No directory tree disappears merely because its name is `.bin`. Before traversal, direct `.bin` and scope containers also classify any own regular package.json through the same bounded manifest-identity rules as package slots; only ENOENT means a container has no own package. A native identity there counts as a physical owner, even at the same version. Malformed, linked, directory or otherwise unreadable own identities refuse. Normal manifest-less containers and immediate executable-file links retain their existing behavior. Link admission checks kind and containment; it does not execute a command or establish its behavior. Unknown symlink/store layouts refuse; this ordinary npm profile is not a claim about pnpm/workspaces or arbitrary module loaders. The hidden-asset control is a generic prior-rule false-positive class: root reports actual retained FP11 has no hidden archive members; no actual FP11 hosted hidden-asset failure is claimed.
 
@@ -48,7 +58,9 @@ The packed TypeScript consumer imports all four public DP doors and actual FP/FT
 
 - real finite collect→idempotent reconcile→derive→read/evidence, with a reopened filesystem repository reading the same published observation and a reopened trace store replaying the actual committed native collection/derivation receipts;
 - a single explicitly driven real scheduler tick, actual SQLite summary publication, close/reopen and query (no timer or hand-authored summary ID);
-- actual FP chart/native decision/control recorder, Foottrace replay, immutable native result, terminal failure, pause and pre-aborted no-stage execution;
+- a caller-authored prepared chart with its native decision and control recorder,
+  immutable native result, a matching filesystem trace read and Foottrace
+  replay, plus terminal failure, pause and pre-aborted execution;
 - the pure Influx encoder. No live Influx is contacted by this consumer.
 
 This is an installed public-package smoke, not a replacement for the existing full suite. Exact failure/category/inner-stage ownership, cancellation during asynchronous work, all retained-history/expiry/crash/clock behavior, storage corruption/bounds, and live disposable Influx roundtrips remain in the unchanged owned suites and CI service. The filesystem smoke is a reopened ordinary published-record read; it does not enable or claim to migrate managed retention/history profiles. It does not prove live device/data adoption.

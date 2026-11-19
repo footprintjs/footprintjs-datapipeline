@@ -1,4 +1,4 @@
 import { fileURLToPath } from 'node:url';
-import { runEngineCohorts } from './current-cohort/matrix.mjs';
+import { runCurrentCohort } from './current-cohort/run.mjs';
 
-await runEngineCohorts(fileURLToPath(new URL('../', import.meta.url)), process.argv[2]);
+await runCurrentCohort(fileURLToPath(new URL('../', import.meta.url)), process.argv[2]);

@@ -1,6 +1,6 @@
 {
   "name": "footprintjs-datapipeline",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "TypeScript collection and derivation flows with recorded lineage and publication evidence, built on FootPrint.",
   "type": "module",
   "license": "MIT",
@@ -58,12 +58,14 @@
     "example": "node --import tsx examples/basic.ts",
     "prepack": "npm run build"
   },
-  "dependencies": {
-    "footprintjs": "^11.0.0 || ^12.0.0",
-    "foottrace": "^1.11.1"
+  "peerDependencies": {
+    "footprintjs": "^14.0.0",
+    "foottrace": "^2.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
+    "footprintjs": "^14.0.0",
+    "foottrace": "^2.1.0",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vitest": "^5.0.5"

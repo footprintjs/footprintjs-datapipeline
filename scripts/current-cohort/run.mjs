@@ -5,7 +5,7 @@ import { copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirS
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cohortFor } from './graph.mjs';
+import { COHORT } from './graph.mjs';
 import { inspectInstalled } from './installed.mjs';
 
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
@@ -16,8 +16,7 @@ const inside = (parent, child) => {
 };
 
 /** Hosted proof driver only. No publication or consumer/source manifest rewriting. */
-export async function runCurrentCohort(sourceInput, evidenceInput, profile = '11') {
-  const cohort = cohortFor(profile);
+export async function runCurrentCohort(sourceInput, evidenceInput) {
   assert.ok(typeof evidenceInput === 'string' && isAbsolute(evidenceInput), 'Pass one fresh absolute evidence directory');
   const source = realpathSync(sourceInput);
   const evidence = resolve(evidenceInput);
@@ -36,7 +35,7 @@ export async function runCurrentCohort(sourceInput, evidenceInput, profile = '11
   let count = 0;
   let timedOut = false;
   const save = (name, value) => writeFileSync(join(evidence, name), JSON.stringify(value, null, 2) + '\n');
-  save('cohort.json', { profile, dependencies: cohort });
+  save('cohort.json', { dependencies: COHORT });
   const command = (program, args, cwd) => {
     const id = String(++count).padStart(2, '0');
     const result = spawnSync(program, args, { cwd, env: environment, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024,
@@ -52,6 +51,8 @@ export async function runCurrentCohort(sourceInput, evidenceInput, profile = '11
   try {
     const manifest = json(join(source, 'package.json'));
     assert.equal(manifest.name, 'footprintjs-datapipeline');
+    const sourceLockfile = join(source, 'package-lock.json');
+    const locked = json(sourceLockfile).packages;
     const pack = join(work, 'pack'); mkdirSync(pack);
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     command(npm, ['pack', '--pack-destination', pack], source); // Normal own prepack/build, never --ignore-scripts.
@@ -68,34 +69,47 @@ export async function runCurrentCohort(sourceInput, evidenceInput, profile = '11
       sha256: archiveSha256 });
     const consumer = join(work, 'consumer'); mkdirSync(consumer);
     const consumerManifest = { name: 'datapipeline-current-cohort-check', version: '0.0.0', private: true, type: 'module',
-      dependencies: { 'footprintjs-datapipeline': `file:${archive}`, ...cohort },
-      devDependencies: { typescript: '5.9.3', '@types/node': '22.19.0' } };
+      dependencies: { 'footprintjs-datapipeline': `file:${archive}`, ...COHORT },
+      devDependencies: { typescript: locked['node_modules/typescript'].version, '@types/node': locked['node_modules/@types/node'].version } };
     writeFileSync(join(consumer, 'package.json'), JSON.stringify(consumerManifest, null, 2) + '\n');
     writeFileSync(join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: {
       target: 'ES2023', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true,
       skipLibCheck: false, types: ['node'], typeRoots: ['./node_modules/@types'], outDir: 'dist',
     }, include: ['consumer.ts'] }, null, 2) + '\n');
     copyFileSync(join(ownFolder, 'consumer.ts'), join(consumer, 'consumer.ts'));
-    command(npm, ['install', '--strict-peer-deps', '--no-audit', '--no-fund'], consumer);
-    const lockSha256 = createHash('sha256').update(readFileSync(join(consumer, 'package-lock.json'))).digest('hex');
-    copyFileSync(join(consumer, 'package-lock.json'), join(evidence, 'consumer-lock.json'));
+    copyFileSync(join(ownFolder, 'prepared.ts'), join(consumer, 'prepared.ts'));
+    const consumerLockfile = join(consumer, 'package-lock.json');
+    // Start with the checked-in resolutions already cached by root npm ci. Let
+    // npm generate the consumer graph for the different manifest and local tarball.
+    copyFileSync(sourceLockfile, consumerLockfile);
+    command(npm, ['install', '--offline', '--strict-peer-deps', '--ignore-scripts', '--no-audit', '--no-fund'], consumer);
+    const lockSha256 = createHash('sha256').update(readFileSync(consumerLockfile)).digest('hex');
+    copyFileSync(consumerLockfile, join(evidence, 'consumer-lock.json'));
+    for (const [path, entry] of Object.entries(json(consumerLockfile).packages)) {
+      if (path === '' || path === 'node_modules/footprintjs-datapipeline') continue;
+      const expected = locked[path];
+      assert.ok(expected?.integrity, `Consumer package ${path} has no checked-in registry input`);
+      for (const field of ['version', 'resolved', 'integrity']) {
+        assert.equal(entry[field], expected[field], `Consumer package ${path} drifted from source lock (${field})`);
+      }
+    }
     copyFileSync(join(consumer, 'package.json'), join(evidence, 'consumer-package.json'));
     command(npm, ['ls', '--all', '--json'], consumer);
-    save('installed-before.json', inspectInstalled(consumer, manifest.version, profile));
+    save('installed-before.json', inspectInstalled(consumer, manifest.version));
     command('python3', [join(ownFolder, 'archive_payload.py'), archive, consumer,
       join(evidence, 'archive-before.json'), manifest.version, archiveSha256, lockSha256], consumer);
     command(process.execPath, [join(consumer, 'node_modules/typescript/bin/tsc'), '--project', join(consumer, 'tsconfig.json')], consumer);
     command(process.execPath, [join(consumer, 'dist/consumer.js')], consumer);
     command('python3', [join(ownFolder, 'archive_payload.py'), archive, consumer,
       join(evidence, 'archive-after.json'), manifest.version, archiveSha256, lockSha256], consumer);
-    save('installed-after.json', inspectInstalled(consumer, manifest.version, profile));
+    save('installed-after.json', inspectInstalled(consumer, manifest.version));
   } catch (error) { errors.push(error); }
   // Do not assert, throw or write evidence from a finally block that could hide the primary error.
   // A timed-out hosted job owns process-tree teardown; this driver does not claim descendant cleanup.
   if (!timedOut) {
     try { rmSync(work, { recursive: true, force: true }); } catch (error) { errors.push(error); }
   }
-  save('RESULT.json', { status: errors.length ? 'FAILED' : 'PASSED', node: process.version, profile,
+  save('RESULT.json', { status: errors.length ? 'FAILED' : 'PASSED', node: process.version,
     commands: count, work, cleanup: timedOut ? 'host-teardown-required' : 'owned-directory-removal-attempted',
     errors: errors.map(error => ({ name: error?.name, message: error?.message })) });
   if (errors.length) throw new AggregateError(errors, 'Current-cohort packed check failed; see evidence');

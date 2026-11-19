@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { inspectInstalled, physicalOwners } from './installed.mjs';
 
-const VERSIONS = { footprintjs: '11.0.0', foottrace: '1.11.1' };
+const VERSIONS = { footprintjs: '14.0.0', foottrace: '2.1.0' };
 const CANDIDATE = '0.10.1'; // Fixture DATA; no source/version mutation.
 
 function packageData(directory, name, version = VERSIONS[name] || '0.0.0') {
@@ -186,7 +186,7 @@ for (const kind of ['malformed-json', 'missing-name', 'missing-native-version', 
     if (kind === 'manifest-directory') mkdirSync(manifest);
     else if (kind === 'manifest-link') symlinkSync(join(root, 'node_modules/foottrace/package.json'), manifest, 'file');
     else writeFileSync(manifest, kind === 'malformed-json' ? '{' : JSON.stringify(kind === 'missing-name'
-      ? { version: '1.11.1' } : { name: 'foottrace' }));
+      ? { version: '2.1.0' } : { name: 'foottrace' }));
     const failure = kind === 'malformed-json' ? SyntaxError : kind === 'missing-name' ? /Missing installed package identity/
       : kind === 'missing-native-version' ? /Missing native-owner version/ : /Unreadable installed package identity/;
     assert.throws(() => physicalOwners(root), failure);

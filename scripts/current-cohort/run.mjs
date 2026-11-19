@@ -5,7 +5,7 @@ import { copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirS
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cohortFor } from './graph.mjs';
+import { COHORT } from './graph.mjs';
 import { inspectInstalled } from './installed.mjs';
 
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
@@ -15,9 +15,34 @@ const inside = (parent, child) => {
   return name === '' || (!isAbsolute(name) && name !== '..' && !name.startsWith(`..${sep}`));
 };
 
+function consumerLock(locked, consumerManifest, manifest, archiveBytes) {
+  const { name, version, dependencies, devDependencies } = consumerManifest;
+  // The fixture needs two native packages, two compiler tools and the Node
+  // types' transitive package. Use the checkout's immutable registry inputs.
+  const packages = { '': { name, version, dependencies, devDependencies } };
+  for (const packageName of [...Object.keys(COHORT), ...Object.keys(devDependencies), 'undici-types']) {
+    const path = `node_modules/${packageName}`;
+    const entry = locked[path];
+    assert.ok(entry?.integrity, `Consumer package ${path} has no checked-in registry input`);
+    packages[path] = { ...entry };
+    if (Object.hasOwn(COHORT, packageName)) delete packages[path].dev;
+  }
+  packages[`node_modules/${manifest.name}`] = {
+    version: manifest.version,
+    resolved: dependencies[manifest.name],
+    integrity: `sha512-${createHash('sha512').update(archiveBytes).digest('base64')}`,
+    license: manifest.license,
+    engines: manifest.engines,
+    dependencies: manifest.dependencies,
+    optionalDependencies: manifest.optionalDependencies,
+    peerDependencies: manifest.peerDependencies,
+    peerDependenciesMeta: manifest.peerDependenciesMeta,
+  };
+  return { name, version, lockfileVersion: 3, requires: true, packages };
+}
+
 /** Hosted proof driver only. No publication or consumer/source manifest rewriting. */
-export async function runCurrentCohort(sourceInput, evidenceInput, profile = '11') {
-  const cohort = cohortFor(profile);
+export async function runCurrentCohort(sourceInput, evidenceInput) {
   assert.ok(typeof evidenceInput === 'string' && isAbsolute(evidenceInput), 'Pass one fresh absolute evidence directory');
   const source = realpathSync(sourceInput);
   const evidence = resolve(evidenceInput);
@@ -36,7 +61,7 @@ export async function runCurrentCohort(sourceInput, evidenceInput, profile = '11
   let count = 0;
   let timedOut = false;
   const save = (name, value) => writeFileSync(join(evidence, name), JSON.stringify(value, null, 2) + '\n');
-  save('cohort.json', { profile, dependencies: cohort });
+  save('cohort.json', { dependencies: COHORT });
   const command = (program, args, cwd) => {
     const id = String(++count).padStart(2, '0');
     const result = spawnSync(program, args, { cwd, env: environment, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024,
@@ -52,6 +77,7 @@ export async function runCurrentCohort(sourceInput, evidenceInput, profile = '11
   try {
     const manifest = json(join(source, 'package.json'));
     assert.equal(manifest.name, 'footprintjs-datapipeline');
+    const locked = json(join(source, 'package-lock.json')).packages;
     const pack = join(work, 'pack'); mkdirSync(pack);
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     command(npm, ['pack', '--pack-destination', pack], source); // Normal own prepack/build, never --ignore-scripts.
@@ -67,35 +93,43 @@ export async function runCurrentCohort(sourceInput, evidenceInput, profile = '11
     save('candidate.json', { name: manifest.name, version: manifest.version, bytes: bytes.length,
       sha256: archiveSha256 });
     const consumer = join(work, 'consumer'); mkdirSync(consumer);
+    const archiveSpec = `file:${relative(consumer, archive).split(sep).join('/')}`;
     const consumerManifest = { name: 'datapipeline-current-cohort-check', version: '0.0.0', private: true, type: 'module',
-      dependencies: { 'footprintjs-datapipeline': `file:${archive}`, ...cohort },
-      devDependencies: { typescript: '5.9.3', '@types/node': '22.19.0' } };
+      dependencies: { [manifest.name]: archiveSpec, ...COHORT },
+      devDependencies: { typescript: locked['node_modules/typescript'].version, '@types/node': locked['node_modules/@types/node'].version } };
     writeFileSync(join(consumer, 'package.json'), JSON.stringify(consumerManifest, null, 2) + '\n');
     writeFileSync(join(consumer, 'tsconfig.json'), JSON.stringify({ compilerOptions: {
       target: 'ES2023', module: 'NodeNext', moduleResolution: 'NodeNext', strict: true,
       skipLibCheck: false, types: ['node'], typeRoots: ['./node_modules/@types'], outDir: 'dist',
     }, include: ['consumer.ts'] }, null, 2) + '\n');
     copyFileSync(join(ownFolder, 'consumer.ts'), join(consumer, 'consumer.ts'));
-    command(npm, ['install', '--strict-peer-deps', '--no-audit', '--no-fund'], consumer);
-    const lockSha256 = createHash('sha256').update(readFileSync(join(consumer, 'package-lock.json'))).digest('hex');
-    copyFileSync(join(consumer, 'package-lock.json'), join(evidence, 'consumer-lock.json'));
+    copyFileSync(join(ownFolder, 'prepared.ts'), join(consumer, 'prepared.ts'));
+    const consumerLockfile = join(consumer, 'package-lock.json');
+    // npm 10 can re-resolve a seeded lock during install. Supply the closed
+    // fixture lock so both npm majors can perform a normal frozen install.
+    const lockBytes = JSON.stringify(consumerLock(locked, consumerManifest, manifest, bytes), null, 2) + '\n';
+    writeFileSync(consumerLockfile, lockBytes);
+    const lockSha256 = createHash('sha256').update(lockBytes).digest('hex');
+    copyFileSync(consumerLockfile, join(evidence, 'consumer-lock.json'));
     copyFileSync(join(consumer, 'package.json'), join(evidence, 'consumer-package.json'));
+    command(npm, ['ci', '--offline', '--strict-peer-deps', '--ignore-scripts', '--no-audit', '--no-fund'], consumer);
+    assert.deepEqual(json(join(consumer, 'node_modules', manifest.name, 'package.json')), manifest, 'Packed manifest drift');
     command(npm, ['ls', '--all', '--json'], consumer);
-    save('installed-before.json', inspectInstalled(consumer, manifest.version, profile));
+    save('installed-before.json', inspectInstalled(consumer, manifest.version));
     command('python3', [join(ownFolder, 'archive_payload.py'), archive, consumer,
       join(evidence, 'archive-before.json'), manifest.version, archiveSha256, lockSha256], consumer);
     command(process.execPath, [join(consumer, 'node_modules/typescript/bin/tsc'), '--project', join(consumer, 'tsconfig.json')], consumer);
     command(process.execPath, [join(consumer, 'dist/consumer.js')], consumer);
     command('python3', [join(ownFolder, 'archive_payload.py'), archive, consumer,
       join(evidence, 'archive-after.json'), manifest.version, archiveSha256, lockSha256], consumer);
-    save('installed-after.json', inspectInstalled(consumer, manifest.version, profile));
+    save('installed-after.json', inspectInstalled(consumer, manifest.version));
   } catch (error) { errors.push(error); }
   // Do not assert, throw or write evidence from a finally block that could hide the primary error.
   // A timed-out hosted job owns process-tree teardown; this driver does not claim descendant cleanup.
   if (!timedOut) {
     try { rmSync(work, { recursive: true, force: true }); } catch (error) { errors.push(error); }
   }
-  save('RESULT.json', { status: errors.length ? 'FAILED' : 'PASSED', node: process.version, profile,
+  save('RESULT.json', { status: errors.length ? 'FAILED' : 'PASSED', node: process.version,
     commands: count, work, cleanup: timedOut ? 'host-teardown-required' : 'owned-directory-removal-attempted',
     errors: errors.map(error => ({ name: error?.name, message: error?.message })) });
   if (errors.length) throw new AggregateError(errors, 'Current-cohort packed check failed; see evidence');

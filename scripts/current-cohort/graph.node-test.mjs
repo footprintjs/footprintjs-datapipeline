@@ -5,7 +5,7 @@ import { assertCohort } from './graph.mjs';
 // Inert path/version DATA only. No fake modules, package install, runtime import or native proof.
 function facts() {
   return {
-    versions: { 'footprintjs-datapipeline': 'candidate-source-version', footprintjs: '11.0.0', foottrace: '1.11.1' },
+    versions: { 'footprintjs-datapipeline': 'candidate-source-version', footprintjs: '14.0.0', foottrace: '2.1.0' },
     root: { footprintjs: '/consumer/node_modules/footprintjs', foottrace: '/consumer/node_modules/foottrace' },
     dp: { footprintjs: '/consumer/node_modules/footprintjs', foottrace: '/consumer/node_modules/foottrace' },
     physical: { footprintjs: ['/consumer/node_modules/footprintjs'], foottrace: ['/consumer/node_modules/foottrace'] },
@@ -33,24 +33,13 @@ test('does not mistake an old candidate for the newly packed source', () => {
   assert.throws(() => assertCohort(facts(), 'another-source-version'), /candidate version drift/);
 });
 
-test('the declared Footprint 12 profile admits its exact public engine with the same record owner', () => {
-  const f = facts(); f.versions.footprintjs = '12.0.0';
-  assert.equal(assertCohort(f, 'candidate-source-version', '12'), f);
-  assert.throws(() => assertCohort(f, 'candidate-source-version', '11'), /wrong current cohort/);
-  assert.throws(() => assertCohort(facts(), 'candidate-source-version', '12'), /wrong current cohort/);
-});
-
-for (const name of ['footprintjs', 'foottrace']) {
-  test(`Footprint 12: ${name} must still have exactly one actual owner`, () => {
-    const f = facts(); f.versions.footprintjs = '12.0.0';
-    assert.equal(assertCohort(f, 'candidate-source-version', '12'), f);
-    f.physical[name].push(`/consumer/node_modules/hidden/node_modules/${name}`);
-    assert.throws(() => assertCohort(f, 'candidate-source-version', '12'), /duplicate physical owner/);
-  });
-}
-
-test('cohort choice is closed and cannot silently select an unreviewed or default engine', () => {
-  for (const profile of ['10', 'latest', '__proto__', '', null, 12]) {
-    assert.throws(() => assertCohort(facts(), 'candidate-source-version', profile), /Unknown native cohort/);
+test('refuses each old engine line and an earlier trace even at the right owner path', () => {
+  for (const version of ['11.0.0', '12.0.0', '13.0.0']) {
+    const f = facts(); f.versions.footprintjs = version;
+    assert.throws(() => assertCohort(f, 'candidate-source-version'), /footprintjs: wrong current cohort/);
+  }
+  for (const version of ['1.11.1', '2.0.0']) {
+    const f = facts(); f.versions.foottrace = version;
+    assert.throws(() => assertCohort(f, 'candidate-source-version'), /foottrace: wrong current cohort/);
   }
 });

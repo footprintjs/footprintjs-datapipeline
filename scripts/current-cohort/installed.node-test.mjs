@@ -13,7 +13,7 @@ function tree(t) {
 }
 function packageData(path, name) {
   mkdirSync(path, { recursive: true });
-  writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: name === 'foottrace' ? '1.11.1' : '11.0.0' }));
+  writeFileSync(join(path, 'package.json'), JSON.stringify({ name, version: name === 'foottrace' ? '2.1.0' : '14.0.0' }));
 }
 test('reads ordinary owner locations from real temporary directories', t => {
   const directory = tree(t);
@@ -45,8 +45,8 @@ test('normal and scoped npm alias slots are counted by manifest identity, with e
   const scoped = join(directory, 'node_modules/@scope/trace-alias'); packageData(scoped, 'foottrace');
   const report = physicalOwners(directory);
   assert.equal(report.physical.footprintjs.length, 2); assert.equal(report.physical.foottrace.length, 2);
-  assert.ok(report.nativePackages.some(row => row.installName === 'engine-alias' && row.name === 'footprintjs' && row.version === '11.0.0'));
-  assert.ok(report.nativePackages.some(row => row.installName === '@scope/trace-alias' && row.name === 'foottrace' && row.version === '1.11.1'));
+  assert.ok(report.nativePackages.some(row => row.installName === 'engine-alias' && row.name === 'footprintjs' && row.version === '14.0.0'));
+  assert.ok(report.nativePackages.some(row => row.installName === '@scope/trace-alias' && row.name === 'foottrace' && row.version === '2.1.0'));
 });
 test('absent, unreadable or conflicting package identity is not proof of no native owner', t => {
   const directory = tree(t);
@@ -55,7 +55,7 @@ test('absent, unreadable or conflicting package identity is not proof of no nati
   writeFileSync(join(path, 'package.json'), '{');
   assert.throws(() => physicalOwners(directory), SyntaxError);
   rmSync(path, { recursive: true });
-  writeFileSync(join(directory, 'node_modules/footprintjs/package.json'), JSON.stringify({ name: 'another-package', version: '11.0.0' }));
+  writeFileSync(join(directory, 'node_modules/footprintjs/package.json'), JSON.stringify({ name: 'another-package', version: '14.0.0' }));
   assert.throws(() => physicalOwners(directory), /another package identity/);
 });
 test('does not silently skip a linked package tree or an unknown hidden package store', t => {

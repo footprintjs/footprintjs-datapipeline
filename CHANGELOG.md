@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## [0.12.0]
+
+### Changed
+
+- Migration: require `footprintjs ^14.0.0` and `foottrace ^2.1.0` as peers. Update
+  both requirements in each consuming workspace and regenerate its lockfile.
+  The pipeline and host share one engine for caller-authored `FlowChart` and
+  `StageContext` types, and one Foottrace installation for native records.
+  FootPrint 11–13 and Foottrace 1.x are unsupported on this line.
+- New runs use the installed engine's recording and privacy rules. Existing
+  repository records stay readable without a data migration. The packed
+  consumer verifies the chart handoff and stored trace replay with the public
+  14.0.0 and 2.1.0 releases.
+
 ## [0.11.1] - 2026-11-15
 
 ### Changed

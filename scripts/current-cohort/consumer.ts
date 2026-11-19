@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { decide, flowChart, type FlowChart } from 'footprintjs';
+import { flowChart } from 'footprintjs';
 import { stateAt } from 'foottrace';
 import {
   createCollectionScheduler, createPipeline, runWindowFlow, WindowExecutionError,
@@ -10,6 +10,7 @@ import {
 import { createFilesystemRepository, createFilesystemTraceStore } from 'footprintjs-datapipeline/filesystem';
 import { createSqliteSummaryStore } from 'footprintjs-datapipeline/sqlite';
 import { encodeLineProtocol, type InfluxPoint } from 'footprintjs-datapipeline/influxdb';
+import { checkPreparedFlow } from './prepared.js';
 
 // Built by installed TypeScript against PUBLIC packed declarations; executed as emitted ESM.
 // Synthetic finite data follows examples/basic.ts and the package's window/prepared-store tests.
@@ -111,20 +112,7 @@ try {
 } finally { await reopened.close?.(); }
 
 const silent = { log() {}, info() {}, warn() {}, error() {}, debug() {} };
-const chart: FlowChart = flowChart<{ reading?: number; finding?: string }>('Capture fixture', scope => { scope.reading = 40; }, 'capture')
-  .addDeciderFunction('Check fixture', scope => decide(scope, [
-    { when: { reading: { gt: 30 } }, then: 'slow', label: 'Fixture exceeds 30' },
-  ], 'normal'), 'check')
-    .addFunctionBranch('slow', 'Keep finding', scope => { scope.finding = 'slow'; })
-    .addFunctionBranch('normal', 'Keep normal', scope => { scope.finding = 'normal'; })
-  .end().setLogger(silent).build();
-const windowResult = await runWindowFlow({ operationId: 'current-cohort:window', chart, traceStore: traces, clock: () => at });
-assert.equal(windowResult.trace.status, 'stored');
-assert.equal(windowResult.record.sharedState.finding, 'slow');
-assert.equal(stateAt(windowResult.record, windowResult.record.commitLog.length - 1).state.finding, 'slow');
-assert.ok(windowResult.record.recorders?.some(item => item.name === 'control-dependencies'));
-assert.ok(Object.isFrozen(windowResult.record)); assert.ok(Object.isFrozen(windowResult.record.sharedState));
-assert.equal(Reflect.set(windowResult.record.sharedState, 'finding', 'changed'), false);
+await checkPreparedFlow(reopenedTraces, at);
 await assert.rejects(runWindowFlow({ operationId: 'current-cohort:failure', chart:
   flowChart('Fail fixture', () => { throw new Error('synthetic failure'); }, 'failure').setLogger(silent).build(),
 }), error => error instanceof WindowExecutionError && error.code === 'WINDOW_FAILED' && error.context.phase === 'execution');
